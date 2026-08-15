@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "observa-api"
+version = "0.1.0"
+description = "Observa API — connector hub, catalog, cost & health"
+license = "Apache-2.0"
+authors = [{ name = "Thiago G. Rocha / TGR Technology", email = "thiago.g.rocha@hotmail.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "cryptography>=43.0.0",
+    "observa-connectors",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "httpx>=0.27.0"]

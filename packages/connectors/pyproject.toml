@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "observa-connectors"
+version = "0.1.0"
+description = "Observa connector SDK and built-in connectors"
+license = "Apache-2.0"
+authors = [{ name = "Thiago G. Rocha / TGR Technology", email = "thiago.g.rocha@hotmail.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.9.0",
+    "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+# Cloud SDK connectors are optional — installed only if you configure that connector.
+aws = ["boto3>=1.35.0"]
+gcp = ["google-cloud-bigquery>=3.25.0", "google-auth>=2.34.0"]
+kubernetes = ["kubernetes>=31.0.0"]
+all = ["observa-connectors[aws,gcp,kubernetes]"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["observa_connectors*"]
