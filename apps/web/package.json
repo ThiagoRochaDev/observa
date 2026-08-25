@@ -8,13 +8,13 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
     "@xyflow/react": "^12.11.2",
-    "next": "^14.2.18",
+    "next": "^16.3.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.13.3"
@@ -26,5 +26,8 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.18",
     "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "glob": "^10.5.0"
   }
 }
