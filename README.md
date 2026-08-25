@@ -10,7 +10,8 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
 
 ## Contents
 
-- [Quick start](#quick-start-local)
+- [Quick start (Docker)](#quick-start-docker)
+- [Quick start (local dev)](#quick-start-local-dev-no-docker)
 - [User guide](#user-guide) — walkthrough of every screen
   - [Connections — add a data source](#1-connections--add-a-data-source)
   - [Overview](#2-overview)
@@ -26,17 +27,27 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
 - [Principles](#principles)
 - [License](#license)
 
-## Quick start (local)
+## Quick start (Docker)
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+- Web: http://localhost:3000
+- API: http://localhost:8080
+- API docs (OpenAPI/Swagger): http://localhost:8080/docs
+
+No credentials or secrets required to boot — the encryption key for connector
+credentials is generated on first run and persisted in a Docker volume.
+
+## Quick start (local dev, no Docker)
 
 ```bash
 ./scripts/dev-local.sh
 ```
 
-That script creates the Python venv, installs the API + connector SDK, installs the web app's `npm` dependencies, and starts both:
-
-- Web: http://localhost:3000
-- API: http://localhost:8080
-- API docs (OpenAPI/Swagger): http://localhost:8080/docs
+That script creates the Python venv, installs the API + connector SDK, installs the web app's `npm` dependencies, and starts both the same way as above, with hot reload.
 
 Default auth mode is **local** (no login screen) until you turn on SSO in **Settings → Authentication**.
 
@@ -135,13 +146,17 @@ Don't see your tool? The **Custom / On-premise (HTTP)** connector polls any inte
 ```
 observa/
 ├── apps/api/          # FastAPI core — connector registry, sync, REST API, encrypted credential store
+│   ├── Dockerfile
+│   └── tests/
 ├── apps/web/          # Next.js UI
+│   └── Dockerfile
 ├── packages/
 │   └── connectors/    # Connector SDK (BaseConnector) + all built-in connectors
 ├── docs/
 │   ├── CONNECTORS.md  # Full connector catalog and how to add a new one
 │   └── screenshots/
 ├── scripts/dev-local.sh
+├── docker-compose.yml
 └── data/              # local SQLite + sync cache + secrets key (gitignored)
 ```
 

@@ -5,7 +5,6 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Iterator
 
 from app.core.config import get_settings
