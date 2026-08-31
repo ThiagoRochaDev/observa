@@ -39,7 +39,12 @@ docker compose up -d --build
 - API docs (OpenAPI/Swagger): http://localhost:8080/docs
 
 No credentials or secrets required to boot — the encryption key for connector
-credentials is generated on first run and persisted in a Docker volume.
+credentials, and a random **API key**, are both generated on first run and
+persisted in a Docker volume (`data/secrets.key`, `data/api_key`). The API
+key is required on every `/api` request (until OIDC login is wired, this is
+what stands between the connections you add and anyone who can reach the
+API over the network) — grab it from `docker compose logs api` on first
+boot, or `cat data/api_key`, and paste it into the web app when prompted.
 
 ## Quick start (local dev, no Docker)
 
@@ -133,7 +138,9 @@ Each of these reads from whatever connector produced that signal type — they w
 
 ### 9. Authentication
 
-**Settings → Authentication** switches the app from local/no-login to SSO (GitLab or Google OIDC) — configure the client ID/secret and issuer there once you're ready to put Observa in front of a team instead of just yourself.
+**Settings → Authentication** switches the app from local/no-login to SSO (GitLab or Google OIDC) — configure the client ID/secret and issuer there once you're ready to put Observa in front of a team instead of just yourself; provider client secrets are encrypted at rest, same as connector credentials.
+
+Regardless of mode, every `/api` request already requires the shared API key described above — "local" means no per-user login screen, not an open API.
 
 ## Supported connectors
 
@@ -157,7 +164,7 @@ observa/
 │   └── screenshots/
 ├── scripts/dev-local.sh
 ├── docker-compose.yml
-└── data/              # local SQLite + sync cache + secrets key (gitignored)
+└── data/              # local SQLite + sync cache + secrets.key + api_key (gitignored)
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for more detail.

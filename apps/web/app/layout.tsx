@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { DM_Sans } from 'next/font/google'
+import { ApiKeyGate } from '@/components/ApiKeyGate'
 import { Shell } from '@/components/Shell'
 import './globals.css'
 
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={dmSans.variable}>
       <body className={dmSans.className}>
-        <Shell>{children}</Shell>
+        <ApiKeyGate>
+          <Shell>{children}</Shell>
+        </ApiKeyGate>
       </body>
     </html>
   )

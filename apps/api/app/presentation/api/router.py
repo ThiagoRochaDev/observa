@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.application import sync_service
 from app.core import db
+from app.core.crypto import decrypt_json, encrypt_json
+from app.core.security import require_api_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
 class AuthSettingsUpdate(BaseModel):
@@ -62,10 +64,13 @@ def get_auth_settings():
     auth = db.get_setting("auth") or {"mode": "local", "providers": {}}
     providers = {}
     for key, p in (auth.get("providers") or {}).items():
+        p = dict(p)
+        has_secret = bool(p.pop("client_secret_enc", None))
+        p.pop("client_secret", None)  # legacy plaintext field, never echoed back
         providers[key] = {
             **p,
-            "client_secret": "••••••••" if p.get("client_secret") else "",
-            "has_client_secret": bool(p.get("client_secret")),
+            "client_secret": "••••••••" if has_secret else "",
+            "has_client_secret": has_secret,
         }
     return {"mode": auth.get("mode", "local"), "providers": providers}
 
@@ -76,9 +81,12 @@ def put_auth_settings(body: AuthSettingsUpdate):
     providers = dict(current.get("providers") or {})
     for key, incoming in (body.providers or {}).items():
         prev = dict(providers.get(key) or {})
+        prev.pop("client_secret", None)  # drop any legacy plaintext value on write
         secret = incoming.get("client_secret") or ""
         if secret and secret != "••••••••":
-            prev["client_secret"] = secret
+            # Secrets at rest go through the same Fernet key as connection
+            # secrets — never stored as plaintext JSON in the settings table.
+            prev["client_secret_enc"] = encrypt_json({"v": secret})
         for field in ("enabled", "client_id", "issuer", "redirect_uri"):
             if field in incoming:
                 prev[field] = incoming[field]
@@ -86,6 +94,15 @@ def put_auth_settings(body: AuthSettingsUpdate):
     saved = {"mode": body.mode, "providers": providers}
     db.set_setting("auth", saved)
     return {"ok": True, "mode": body.mode}
+
+
+def _oidc_client_secret(provider: dict) -> str | None:
+    """Decrypt a provider's client_secret for internal use (e.g. the OIDC
+    token exchange, once that flow is wired) — never returned over HTTP."""
+    enc = provider.get("client_secret_enc")
+    if not enc:
+        return None
+    return decrypt_json(enc).get("v")
 
 
 @router.get("/connectors")

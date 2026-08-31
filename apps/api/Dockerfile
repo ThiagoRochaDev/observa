@@ -12,6 +12,14 @@ RUN pip install --no-cache-dir -e "/observa/packages/connectors[all]" \
     && pip install --no-cache-dir -e "/observa/apps/api"
 
 ENV DATA_DIR=/data
+
+# Non-root: /data is chowned here (before the VOLUME instruction) so a
+# freshly-created volume inherits appuser ownership instead of root's.
+RUN useradd -u 1000 -m appuser \
+    && mkdir -p /data \
+    && chown -R appuser:appuser /data /observa
+USER appuser
+
 VOLUME ["/data"]
 
 EXPOSE 8080

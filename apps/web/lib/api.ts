@@ -1,14 +1,49 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+const API_KEY_STORAGE = 'observa_api_key'
+
+// Every /api route requires a shared key (see app/core/security.py) — the
+// operator pastes it once (ApiKeyGate) and it's kept in this browser only.
+export function getApiKey(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return window.localStorage.getItem(API_KEY_STORAGE) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setApiKey(key: string) {
+  try {
+    window.localStorage.setItem(API_KEY_STORAGE, key)
+  } catch {
+    // ignore (private browsing, storage disabled, ...)
+  }
+}
+
+export function clearApiKey() {
+  try {
+    window.localStorage.removeItem(API_KEY_STORAGE)
+  } catch {
+    // ignore
+  }
+}
+
+export class ApiAuthError extends Error {}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      'X-Observa-Api-Key': getApiKey(),
       ...(init?.headers || {}),
     },
     cache: 'no-store',
   })
+  if (res.status === 401) {
+    clearApiKey()
+    throw new ApiAuthError('Missing or invalid API key')
+  }
   if (!res.ok) {
     const body = await res.text()
     throw new Error(body || `HTTP ${res.status}`)
@@ -75,6 +110,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 }
 
 export const api = {
+  healthz: () => req<{ status: string }>('/healthz'),
   health: () => req<Health>('/api/health'),
   seedDemo: () => req<Record<string, unknown>>('/api/demo/seed', { method: 'POST' }),
   connectors: () => req<Connector[]>('/api/connectors'),

@@ -19,6 +19,18 @@ def test_root(client):
     assert r.json()["app"] == "observa"
 
 
+def test_healthz_is_public(client):
+    client.headers.pop("X-Observa-Api-Key", None)
+    r = client.get("/healthz")
+    assert r.status_code == 200
+
+
+def test_api_requires_key(client):
+    client.headers.pop("X-Observa-Api-Key", None)
+    assert client.get("/api/connections").status_code == 401
+    assert client.get("/api/health").status_code == 401
+
+
 def test_connectors_catalog_has_mock_demo(client):
     r = client.get("/api/connectors")
     assert r.status_code == 200

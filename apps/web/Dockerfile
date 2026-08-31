@@ -15,9 +15,11 @@ RUN npm run build
 FROM node:20-slim AS runtime
 WORKDIR /web
 ENV NODE_ENV=production
-COPY --from=build /web/public ./public
-COPY --from=build /web/.next/standalone ./
-COPY --from=build /web/.next/static ./.next/static
+# node:20-slim ships a non-root "node" user (uid 1000) — use it instead of root.
+COPY --from=build --chown=node:node /web/public ./public
+COPY --from=build --chown=node:node /web/.next/standalone ./
+COPY --from=build --chown=node:node /web/.next/static ./.next/static
+USER node
 
 EXPOSE 3000
 CMD ["node", "server.js"]

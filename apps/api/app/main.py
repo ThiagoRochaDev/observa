@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.db import init_db
+from app.core.security import get_or_create_api_key
 from app.presentation.api.router import router
 
 settings = get_settings()
@@ -13,6 +14,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    get_or_create_api_key()  # prints the token to the log on first boot
     try:
         from app.application.sync_service import ensure_full_demo
 
@@ -48,3 +50,10 @@ def root():
         "docs": "/docs",
         "health": "/api/health",
     }
+
+
+@app.get("/healthz")
+def healthz():
+    """Unauthenticated liveness probe (Docker/orchestrator healthcheck) —
+    deliberately outside /api, which requires the API key on every route."""
+    return {"status": "ok"}

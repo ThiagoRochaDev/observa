@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     database_path: Path | None = None
     # Fernet key for encrypting connector secrets (generated & persisted on first boot)
     secrets_key_file: Path | None = None
+    # Shared token required on every /api request (generated & persisted on first boot)
+    api_key_file_path: Path | None = None
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -27,6 +29,10 @@ class Settings(BaseSettings):
     @property
     def key_file(self) -> Path:
         return self.secrets_key_file or (self.data_dir / "secrets.key")
+
+    @property
+    def api_key_file(self) -> Path:
+        return self.api_key_file_path or (self.data_dir / "api_key")
 
 
 @lru_cache
