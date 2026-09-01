@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.application import sync_service
 from app.core import db
-from app.core.crypto import decrypt_json, encrypt_json
+from app.core.crypto import encrypt_json
 from app.core.security import require_api_key
+from app.core.session import verify_session_token
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
@@ -59,6 +60,28 @@ def seed_demo():
     return sync_service.ensure_full_demo()
 
 
+@router.get("/auth/me")
+def auth_me(
+    x_observa_api_key: str | None = Header(default=None, alias="X-Observa-Api-Key"),
+    authorization: str | None = Header(default=None),
+):
+    """Who the caller is — a real identity if they're on an OIDC session, or
+    just 'local' if they're using the shared key (require_api_key already
+    accepted whichever it is; this only tells the two apart for the UI)."""
+    provided = x_observa_api_key
+    if not provided and authorization and authorization.lower().startswith("bearer "):
+        provided = authorization[7:]
+    claims = verify_session_token(provided) if provided else None
+    if claims:
+        return {
+            "mode": "oidc",
+            "provider": claims.get("provider"),
+            "email": claims.get("email"),
+            "name": claims.get("name"),
+        }
+    return {"mode": "local"}
+
+
 @router.get("/auth/settings")
 def get_auth_settings():
     auth = db.get_setting("auth") or {"mode": "local", "providers": {}}
@@ -94,15 +117,6 @@ def put_auth_settings(body: AuthSettingsUpdate):
     saved = {"mode": body.mode, "providers": providers}
     db.set_setting("auth", saved)
     return {"ok": True, "mode": body.mode}
-
-
-def _oidc_client_secret(provider: dict) -> str | None:
-    """Decrypt a provider's client_secret for internal use (e.g. the OIDC
-    token exchange, once that flow is wired) — never returned over HTTP."""
-    enc = provider.get("client_secret_enc")
-    if not enc:
-        return None
-    return decrypt_json(enc).get("v")
 
 
 @router.get("/connectors")

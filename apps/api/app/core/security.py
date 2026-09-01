@@ -1,13 +1,18 @@
-"""API-key gate for the whole /api surface.
+"""Auth gate for the whole /api surface.
 
-Observa v0.1.0 ships with no OIDC login yet (that flow is tracked
-separately, see settings/auth). Until then, every /api route holds
-real power over cloud credentials (create/edit/delete connections,
-change auth settings) — so it must not be reachable with zero
-authentication. This is the interim "local mode" guard: a random
-token generated on first boot, persisted next to secrets.key, and
-required on every request via the X-Observa-Api-Key header (or
-`Authorization: Bearer <key>`).
+Two modes (see settings/auth, app/presentation/api/router.py):
+  - local (default): a single shared token generated on first boot,
+    persisted next to secrets.key, required on every request via the
+    X-Observa-Api-Key header (or `Authorization: Bearer <key>`). Good
+    enough for one operator on their own laptop.
+  - oidc: real per-user login (Google/GitLab) — see core/oidc.py and
+    presentation/api/auth_flow_router.py for the login flow. The frontend
+    stores the resulting session token in the SAME header slot the shared
+    key used to occupy, so this gate accepts either value: a match against
+    the static key, OR a validly-signed, unexpired session token. Mode
+    doesn't have to be all-or-nothing at the gate level — this just means
+    an operator mid-migration (key still valid, users starting to log in
+    via OIDC) doesn't get locked out either way.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ import stat
 from fastapi import Header, HTTPException
 
 from app.core.config import get_settings
+from app.core.session import verify_session_token
 
 
 def _restrict(path) -> None:
@@ -50,9 +56,15 @@ def require_api_key(
     x_observa_api_key: str | None = Header(default=None, alias="X-Observa-Api-Key"),
     authorization: str | None = Header(default=None),
 ) -> None:
-    expected = get_or_create_api_key()
     provided = x_observa_api_key
     if not provided and authorization and authorization.lower().startswith("bearer "):
         provided = authorization[7:]
-    if not provided or not secrets.compare_digest(provided, expected):
+    if not provided:
         raise HTTPException(status_code=401, detail="Missing or invalid API key")
+
+    expected = get_or_create_api_key()
+    if secrets.compare_digest(provided, expected):
+        return
+    if verify_session_token(provided) is not None:
+        return
+    raise HTTPException(status_code=401, detail="Missing or invalid API key")

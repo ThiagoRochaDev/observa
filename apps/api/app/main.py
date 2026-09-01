@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.db import init_db
 from app.core.security import get_or_create_api_key
+from app.presentation.api.auth_flow_router import router as auth_flow_router
 from app.presentation.api.router import router
 
 settings = get_settings()
@@ -41,6 +42,11 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+# Deliberately outside /api (unauthenticated by design — see
+# auth_flow_router.py's module docstring): a browser hits these to GET a
+# credential in the first place, matching the redirect_uri the settings
+# page defaults providers to (http://localhost:8080/auth/callback/{provider}).
+app.include_router(auth_flow_router)
 
 
 @app.get("/")

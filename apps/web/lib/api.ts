@@ -111,6 +111,14 @@ export const CATEGORY_LABELS: Record<string, string> = {
 
 export const api = {
   healthz: () => req<{ status: string }>('/healthz'),
+  // Public — no key needed. Lets the login gate decide what to render
+  // (paste-a-key form vs "Continue with Google/GitLab") before the browser
+  // has any credential at all.
+  authMode: () => req<{ mode: 'local' | 'oidc'; providers: string[] }>('/auth/mode'),
+  authMe: () =>
+    req<{ mode: 'local' | 'oidc'; provider?: string; email?: string; name?: string }>(
+      '/api/auth/me',
+    ),
   health: () => req<Health>('/api/health'),
   seedDemo: () => req<Record<string, unknown>>('/api/demo/seed', { method: 'POST' }),
   connectors: () => req<Connector[]>('/api/connectors'),
