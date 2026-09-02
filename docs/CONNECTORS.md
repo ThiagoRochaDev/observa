@@ -39,9 +39,9 @@ Credentials are encrypted at rest (Fernet, `app/core/crypto.py`) — never logge
 | `vercel` | **Live** — projects | Access token |
 | `mongodb-atlas` | **Live** — clusters | Public/private API key |
 | `cloudflare` | **Live** — zones | API token |
-| `oci` | Stub | API signing key |
-| `linode` | Stub | PAT |
-| `netlify` | Stub | PAT |
+| `oci` | **Live** — usage cost + resource inventory | API signing key (request signing) |
+| `linode` | **Live** — instances + account balance | PAT |
+| `netlify` | **Live** — sites + build minutes | PAT |
 
 ### Observability & APM
 | ID | Status | Auth |
@@ -49,21 +49,21 @@ Credentials are encrypted at rest (Fernet, `app/core/crypto.py`) — never logge
 | `datadog` | **Live** — usage cost, hosts, monitors | API key + App key |
 | `newrelic` | **Live** — applications | User API key |
 | `sentry` | **Live** — projects | Auth token |
-| `grafana-cloud` | Stub | Access policy token |
-| `elastic-cloud` | Stub | API key |
+| `grafana-cloud` | **Live** — stacks | Access policy token |
+| `elastic-cloud` | **Live** — deployments | API key |
 
 ### Incident management
 | ID | Status | Auth |
 |----|--------|------|
 | `pagerduty` | **Live** — services + triggered incidents | API token |
-| `opsgenie` | Stub | API key |
+| `opsgenie` | **Live** — alerts + schedules | API key |
 
 ### Source control & CI/CD
 | ID | Status | Auth |
 |----|--------|------|
 | `github` | **Live** — repos + Actions minutes | PAT |
 | `gitlab` | **Live** — projects | PAT |
-| `bitbucket` | Stub | App password |
+| `bitbucket` | **Live** — repos | App password |
 
 ### On-premise & self-hosted
 | ID | Status | Auth |
@@ -71,20 +71,27 @@ Credentials are encrypted at rest (Fernet, `app/core/crypto.py`) — never logge
 | `kubernetes` | **Live** — node/pod inventory, any cluster (on-prem, EKS/GKE/AKS, k3s) | ServiceAccount bearer token |
 | `prometheus` | **Live** — PromQL queries against any Prometheus/Thanos/Mimir | Bearer token or basic auth (optional) |
 | `onprem-custom` | **Live** — generic HTTP polling for in-house tools | Bearer token / custom header |
-| `splunk` | Stub | Auth token |
+| `splunk` | **Live** — index volume + license usage | Auth token |
 
 ### Billing & data SaaS
 | ID | Status | Auth |
 |----|--------|------|
 | `stripe` | **Live** — balance + charges | Secret key |
-| `snowflake` | Stub | Key-pair (private key) |
+| `snowflake` | **Live** — warehouse credits + inventory | Key-pair (private key) |
 
 ### Demo
 | ID | Status |
 |----|--------|
 | `mock-demo` | Ships a full synthetic dataset — cost, products, APM, alerts — for exploring the UI without any credentials |
 
-"Stub" connectors already appear in the catalog with a working credential
-form (so a client can save the connection and see it listed) — `pull()`
-raises `NotImplementedError` until wired up. Swap `_StubConnector` for a real
-`BaseConnector` implementation the same way `providers/saas.py` does.
+All 27 connectors in the catalog are now **Live** — each `pull()` calls the
+real vendor API. `oci` and `snowflake` sign the request/JWT with the
+credential's private key (request signing / key-pair auth) instead of a
+plain token, and need the optional `cryptography` dependency (`pip install
+observa-connectors[oci]` / `[snowflake]`, or `[all]`).
+
+New connector without a live vendor account to test against yet? Add a
+`_StubConnector` subclass (schema-only placeholder, `pull()` raises
+`NotImplementedError`) the same way the 9 above started out, then swap it
+for a real `BaseConnector` implementation once you're ready — see
+`providers/saas.py` for the pattern.

@@ -4,13 +4,20 @@ from observa_connectors.base import BaseConnector
 from observa_connectors.mock_demo import MockDemoConnector
 from observa_connectors.providers.aws import AwsCostConnector
 from observa_connectors.providers.azure import AzureCostConnector
+from observa_connectors.providers.bitbucket import BitbucketConnector
 from observa_connectors.providers.datadog import DatadogConnector
+from observa_connectors.providers.elastic_cloud import ElasticCloudConnector
 from observa_connectors.providers.gcp import GcpBillingConnector
+from observa_connectors.providers.grafana_cloud import GrafanaCloudConnector
+from observa_connectors.providers.linode import LinodeConnector
+from observa_connectors.providers.netlify import NetlifyConnector
+from observa_connectors.providers.oci import OciConnector
 from observa_connectors.providers.onprem import (
     KubernetesConnector,
     OnPremAgentConnector,
     PrometheusConnector,
 )
+from observa_connectors.providers.opsgenie import OpsgenieConnector
 from observa_connectors.providers.saas import (
     CloudflareConnector,
     DigitalOceanConnector,
@@ -23,17 +30,8 @@ from observa_connectors.providers.saas import (
     StripeConnector,
     VercelConnector,
 )
-from observa_connectors.stubs import (
-    BitbucketStub,
-    ElasticCloudStub,
-    GrafanaCloudStub,
-    LinodeStub,
-    NetlifyStub,
-    OciStub,
-    OpsgenieStub,
-    SnowflakeStub,
-    SplunkStub,
-)
+from observa_connectors.providers.snowflake import SnowflakeConnector
+from observa_connectors.providers.splunk import SplunkConnector
 
 # Ordered roughly: demo first, then the big public clouds, then everything else
 # grouped by category. `apps/web` groups these by `.category` for the catalog UI.
@@ -43,34 +41,34 @@ _CONNECTORS: list[BaseConnector] = [
     AwsCostConnector(),
     GcpBillingConnector(),
     AzureCostConnector(),
-    OciStub(),
+    OciConnector(),
     DigitalOceanConnector(),
-    LinodeStub(),
+    LinodeConnector(),
     CloudflareConnector(),
     VercelConnector(),
-    NetlifyStub(),
+    NetlifyConnector(),
     MongoDbAtlasConnector(),
     # Observability / APM
     DatadogConnector(),
     NewRelicConnector(),
-    GrafanaCloudStub(),
-    ElasticCloudStub(),
+    GrafanaCloudConnector(),
+    ElasticCloudConnector(),
     SentryConnector(),
     # Incident management
     PagerDutyConnector(),
-    OpsgenieStub(),
+    OpsgenieConnector(),
     # VCS / CI-CD
     GitHubConnector(),
     GitLabConnector(),
-    BitbucketStub(),
+    BitbucketConnector(),
     # On-premise / self-hosted
     KubernetesConnector(),
     PrometheusConnector(),
-    SplunkStub(),
+    SplunkConnector(),
     OnPremAgentConnector(),
     # Billing / data SaaS
     StripeConnector(),
-    SnowflakeStub(),
+    SnowflakeConnector(),
 ]
 
 

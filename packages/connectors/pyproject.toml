@@ -19,7 +19,13 @@ dependencies = [
 aws = ["boto3>=1.35.0"]
 gcp = ["google-cloud-bigquery>=3.25.0", "google-auth>=2.34.0"]
 kubernetes = ["kubernetes>=31.0.0"]
-all = ["observa-connectors[aws,gcp,kubernetes]"]
+# OCI e Snowflake assinam a requisição/JWT com a chave privada do usuário
+# (request signing / key-pair auth) em vez de token simples — precisa de
+# `cryptography` pra isso. Import é tardio (só entra em uso se você configurar
+# um desses dois conectores).
+oci = ["cryptography>=42.0.0"]
+snowflake = ["cryptography>=42.0.0"]
+all = ["observa-connectors[aws,gcp,kubernetes,oci,snowflake]"]
 
 [tool.setuptools.packages.find]
 where = ["."]
