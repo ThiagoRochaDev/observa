@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Observa",
+    "slug": "observa-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": { "supportsTablet": true },
+    "android": { "package": "technology.tgr.observa" }
+  }
+}

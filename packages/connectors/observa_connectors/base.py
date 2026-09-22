@@ -65,6 +65,14 @@ class TestResult:
     message: str = ""
 
 
+@dataclass
+class ActionResult:
+    ok: bool
+    message: str = ""
+    external_id: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+
 class BaseConnector(ABC):
     id: str
     name: str
@@ -99,3 +107,25 @@ class BaseConnector(ABC):
         since: date | None = None,
     ) -> PullResult:
         ...
+
+    def apply_tags(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        resource: dict[str, Any],
+        tags: dict[str, str],
+        dry_run: bool = True,
+    ) -> ActionResult:
+        raise NotImplementedError(f"Connector {self.id} does not support tag write-back")
+
+    def change_power_state(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        resource: dict[str, Any],
+        action: str,
+        dry_run: bool = True,
+    ) -> ActionResult:
+        raise NotImplementedError(f"Connector {self.id} does not support power actions")

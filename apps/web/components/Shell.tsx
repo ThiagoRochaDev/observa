@@ -37,6 +37,18 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
     </svg>
   ),
+  governance: (
+    <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
+      <path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  ),
+  budgets: (
+    <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M16 8.5c-.8-.7-2-1-3.4-1-1.9 0-3.1.8-3.1 2s1.1 1.8 3.1 2.2 3.3.8 3.3 2.4-1.4 2.4-3.5 2.4c-1.5 0-2.9-.4-3.8-1.2M12 5.5v13" />
+    </svg>
+  ),
   dashboards: (
     <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -104,6 +116,8 @@ const GROUPS = [
       { href: '/products', label: 'Products', description: 'Business catalog & spend', icon: 'products' },
       { href: '/maps', label: 'Ecosystem maps', description: 'Service topology', icon: 'maps' },
       { href: '/inventory', label: 'Inventory', description: 'Cloud resources', icon: 'inventory' },
+      { href: '/budgets', label: 'Budgets', description: 'Limits, forecast & actions', icon: 'budgets' },
+      { href: '/governance', label: 'Governance', description: 'Tags, schedules & approvals', icon: 'governance' },
     ],
   },
   {

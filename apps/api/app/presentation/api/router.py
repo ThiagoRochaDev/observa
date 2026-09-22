@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from app.application import sync_service
+from app.application import budget_service, governance_service, sync_service
 from app.core import db
 from app.core.crypto import encrypt_json
 from app.core.security import require_api_key
@@ -37,6 +38,86 @@ class TestConnectionBody(BaseModel):
     connector_id: str
     config: dict[str, Any] = Field(default_factory=dict)
     secrets: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResourceTagsUpdate(BaseModel):
+    tags: dict[str, str]
+    dry_run: bool = True
+    write_back: bool = True
+
+
+class PolicyCreate(BaseModel):
+    name: str
+    resource_ids: list[int] = Field(default_factory=list)
+    selector: dict[str, str] = Field(default_factory=dict)
+    timezone: str = "UTC"
+    weekdays: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    start_time: str | None = None
+    stop_time: str | None = None
+    expires_at: str | None = None
+    expiration_action: str = "stop"
+    enabled: bool = True
+    require_approval: bool = True
+    dry_run: bool = True
+
+
+class PolicyUpdate(BaseModel):
+    name: str | None = None
+    resource_ids: list[int] | None = None
+    selector: dict[str, str] | None = None
+    timezone: str | None = None
+    weekdays: list[int] | None = None
+    start_time: str | None = None
+    stop_time: str | None = None
+    expires_at: str | None = None
+    expiration_action: str | None = None
+    enabled: bool | None = None
+    require_approval: bool | None = None
+    dry_run: bool | None = None
+
+
+class AutomationRunBody(BaseModel):
+    at: datetime | None = None
+
+
+class ActionRejectBody(BaseModel):
+    reason: str = "Rejected by operator"
+
+
+class BudgetRuleCreate(BaseModel):
+    name: str
+    scope_type: str
+    scope_value: str
+    amount: float = Field(gt=0)
+    currency: str = "BRL"
+    window_days: int = Field(default=30, ge=1, le=366)
+    warning_threshold: float = Field(default=0.8, gt=0)
+    critical_threshold: float = Field(default=1.0, gt=0)
+    response_mode: str = "notify"
+    owner: str | None = None
+    resource_ids: list[int] = Field(default_factory=list)
+    dry_run: bool = True
+    enabled: bool = True
+
+
+class BudgetRuleUpdate(BaseModel):
+    name: str | None = None
+    scope_type: str | None = None
+    scope_value: str | None = None
+    amount: float | None = Field(default=None, gt=0)
+    currency: str | None = None
+    window_days: int | None = Field(default=None, ge=1, le=366)
+    warning_threshold: float | None = Field(default=None, gt=0)
+    critical_threshold: float | None = Field(default=None, gt=0)
+    response_mode: str | None = None
+    owner: str | None = None
+    resource_ids: list[int] | None = None
+    dry_run: bool | None = None
+    enabled: bool | None = None
+
+
+class BudgetEvaluateBody(BaseModel):
+    at: date | None = None
 
 
 @router.get("/health")
@@ -193,6 +274,52 @@ def costs_trend(days: int = 30):
     return db.cost_trend(days)
 
 
+@router.get("/budgets")
+def budgets():
+    return db.list_budget_rules()
+
+
+@router.post("/budgets")
+def create_budget(body: BudgetRuleCreate):
+    try:
+        return budget_service.create_rule(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.patch("/budgets/{rule_id}")
+def patch_budget(rule_id: str, body: BudgetRuleUpdate):
+    try:
+        row = budget_service.update_rule(rule_id, body.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not row:
+        raise HTTPException(404, "Budget rule not found")
+    return row
+
+
+@router.delete("/budgets/{rule_id}")
+def delete_budget(rule_id: str):
+    if not db.delete_budget_rule(rule_id):
+        raise HTTPException(404, "Budget rule not found")
+    return {"ok": True}
+
+
+@router.post("/budgets/evaluate")
+def evaluate_budgets(body: BudgetEvaluateBody | None = None):
+    return budget_service.evaluate_budgets(body.at if body else None)
+
+
+@router.post("/budgets/monitor")
+def monitor_budgets(body: BudgetEvaluateBody | None = None):
+    return budget_service.monitor_budgets(body.at if body else None)
+
+
+@router.get("/budgets/events")
+def budget_events(rule_id: str | None = None):
+    return db.list_budget_events(rule_id)
+
+
 @router.get("/products")
 def products():
     return db.list_products()
@@ -207,8 +334,77 @@ def product_detail(slug: str):
 
 
 @router.get("/resources")
-def resources(product: str | None = None):
-    return db.list_resources(product)
+def resources(product: str | None = None, untagged: bool = False):
+    rows = db.list_resources(product)
+    if untagged:
+        rows = [row for row in rows if not row.get("product") or not row.get("labels")]
+    return rows
+
+
+@router.patch("/resources/{resource_uid}/tags")
+def patch_resource_tags(resource_uid: int, body: ResourceTagsUpdate):
+    try:
+        return governance_service.apply_resource_tags(
+            resource_uid, body.tags, dry_run=body.dry_run, write_back=body.write_back
+        )
+    except ValueError as exc:
+        raise HTTPException(404 if "not found" in str(exc).lower() else 400, str(exc)) from exc
+    except NotImplementedError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/automation/policies")
+def automation_policies():
+    return db.list_policies()
+
+
+@router.post("/automation/policies")
+def create_automation_policy(body: PolicyCreate):
+    try:
+        return governance_service.create_policy(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.patch("/automation/policies/{policy_id}")
+def patch_automation_policy(policy_id: str, body: PolicyUpdate):
+    row = db.update_policy(policy_id, body.model_dump(exclude_unset=True))
+    if not row:
+        raise HTTPException(404, "Policy not found")
+    return row
+
+
+@router.delete("/automation/policies/{policy_id}")
+def delete_automation_policy(policy_id: str):
+    if not db.delete_policy(policy_id):
+        raise HTTPException(404, "Policy not found")
+    return {"ok": True}
+
+
+@router.post("/automation/run-due")
+def run_due_automation(body: AutomationRunBody | None = None):
+    return governance_service.run_due(body.at if body else None)
+
+
+@router.get("/automation/actions")
+def automation_actions(status: str | None = None):
+    return db.list_actions(status)
+
+
+@router.post("/automation/actions/{action_id}/approve")
+def approve_automation_action(action_id: str):
+    try:
+        return governance_service.approve_action(action_id)
+    except ValueError as exc:
+        raise HTTPException(404 if "not found" in str(exc).lower() else 409, str(exc)) from exc
+
+
+@router.post("/automation/actions/{action_id}/reject")
+def reject_automation_action(action_id: str, body: ActionRejectBody):
+    try:
+        return governance_service.reject_action(action_id, body.reason)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @router.get("/observability")

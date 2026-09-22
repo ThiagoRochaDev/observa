@@ -99,12 +99,97 @@ def init_db() -> None:
                   detected_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS automation_policies (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  resource_ids_json TEXT NOT NULL,
+                  selector_json TEXT NOT NULL,
+                  timezone TEXT NOT NULL,
+                  weekdays_json TEXT NOT NULL,
+                  start_time TEXT,
+                  stop_time TEXT,
+                  expires_at TEXT,
+                  expiration_action TEXT NOT NULL DEFAULT 'stop',
+                  enabled INTEGER NOT NULL DEFAULT 1,
+                  require_approval INTEGER NOT NULL DEFAULT 1,
+                  dry_run INTEGER NOT NULL DEFAULT 1,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS action_runs (
+                  id TEXT PRIMARY KEY,
+                  policy_id TEXT,
+                  resource_uid INTEGER NOT NULL,
+                  action TEXT NOT NULL,
+                  status TEXT NOT NULL,
+                  scheduled_for TEXT,
+                  reason TEXT,
+                  result_message TEXT,
+                  dry_run INTEGER NOT NULL DEFAULT 1,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS budget_rules (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  scope_type TEXT NOT NULL,
+                  scope_value TEXT NOT NULL,
+                  amount REAL NOT NULL,
+                  currency TEXT NOT NULL,
+                  window_days INTEGER NOT NULL DEFAULT 30,
+                  warning_threshold REAL NOT NULL DEFAULT 0.8,
+                  critical_threshold REAL NOT NULL DEFAULT 1.0,
+                  response_mode TEXT NOT NULL DEFAULT 'notify',
+                  owner TEXT,
+                  resource_ids_json TEXT NOT NULL,
+                  dry_run INTEGER NOT NULL DEFAULT 1,
+                  enabled INTEGER NOT NULL DEFAULT 1,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS budget_events (
+                  id TEXT PRIMARY KEY,
+                  rule_id TEXT NOT NULL,
+                  dedupe_key TEXT NOT NULL UNIQUE,
+                  level TEXT NOT NULL,
+                  status TEXT NOT NULL,
+                  actual_cost REAL NOT NULL,
+                  projected_cost REAL NOT NULL,
+                  usage_pct REAL NOT NULL,
+                  period_start TEXT NOT NULL,
+                  period_end TEXT NOT NULL,
+                  action_ids_json TEXT NOT NULL,
+                  message TEXT NOT NULL,
+                  created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS audit_events (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  event_type TEXT NOT NULL,
+                  subject TEXT NOT NULL,
+                  payload_json TEXT NOT NULL,
+                  created_at TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_cost_date ON cost_records(date);
                 CREATE INDEX IF NOT EXISTS idx_cost_product ON cost_records(product);
                 CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(name);
                 CREATE INDEX IF NOT EXISTS idx_metrics_product ON metrics(product);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_identity
+                  ON resources(connection_id, provider, resource_key);
+                CREATE INDEX IF NOT EXISTS idx_actions_status ON action_runs(status);
+                CREATE INDEX IF NOT EXISTS idx_actions_scheduled ON action_runs(scheduled_for);
+                CREATE INDEX IF NOT EXISTS idx_budget_events_rule ON budget_events(rule_id);
                 """
             )
+            action_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(action_runs)").fetchall()
+            }
+            if "dry_run" not in action_columns:
+                conn.execute("ALTER TABLE action_runs ADD COLUMN dry_run INTEGER NOT NULL DEFAULT 1")
             # defaults
             cur = conn.execute("SELECT value FROM settings WHERE key = 'auth'")
             if cur.fetchone() is None:
@@ -306,12 +391,17 @@ def replace_costs(connection_id: str, rows: list[dict]) -> None:
 
 def replace_resources(connection_id: str, rows: list[dict]) -> None:
     with db() as conn:
-        conn.execute("DELETE FROM resources WHERE connection_id = ?", (connection_id,))
         conn.executemany(
             "INSERT INTO resources("
             "connection_id, provider, type, resource_key, name, region, product, "
             "squad, status, labels_json"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(connection_id, provider, resource_key) DO UPDATE SET "
+            "type = excluded.type, name = excluded.name, region = excluded.region, "
+            "product = COALESCE(excluded.product, resources.product), "
+            "squad = COALESCE(excluded.squad, resources.squad), status = excluded.status, "
+            "labels_json = CASE WHEN excluded.labels_json = '{}' THEN resources.labels_json "
+            "ELSE excluded.labels_json END",
             [
                 (
                     connection_id,
@@ -328,6 +418,17 @@ def replace_resources(connection_id: str, rows: list[dict]) -> None:
                 for r in rows
             ],
         )
+        identities = [(r["provider"], r["id"]) for r in rows]
+        if identities:
+            placeholders = ",".join("(?, ?)" for _ in identities)
+            flat = [value for identity in identities for value in identity]
+            conn.execute(
+                f"DELETE FROM resources WHERE connection_id = ? "
+                f"AND (provider, resource_key) NOT IN ({placeholders})",
+                [connection_id, *flat],
+            )
+        else:
+            conn.execute("DELETE FROM resources WHERE connection_id = ?", (connection_id,))
 
 
 def replace_metrics(connection_id: str, rows: list[dict]) -> None:
@@ -520,6 +621,8 @@ def list_resources(product: str | None = None) -> list[dict]:
             rows = conn.execute("SELECT * FROM resources ORDER BY product, type").fetchall()
     return [
         {
+            "uid": r["id"],
+            "connection_id": r["connection_id"],
             "provider": r["provider"],
             "type": r["type"],
             "id": r["resource_key"],
@@ -532,6 +635,350 @@ def list_resources(product: str | None = None) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def get_resource(resource_uid: int) -> dict | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_uid,)).fetchone()
+    if not row:
+        return None
+    return {
+        "uid": row["id"],
+        "connection_id": row["connection_id"],
+        "provider": row["provider"],
+        "type": row["type"],
+        "id": row["resource_key"],
+        "name": row["name"],
+        "region": row["region"],
+        "product": row["product"],
+        "squad": row["squad"],
+        "status": row["status"],
+        "labels": json.loads(row["labels_json"] or "{}"),
+    }
+
+
+def update_resource_tags(resource_uid: int, tags: dict[str, str]) -> dict | None:
+    resource = get_resource(resource_uid)
+    if not resource:
+        return None
+    labels = {**resource["labels"], **tags}
+    product = tags.get("product", resource.get("product"))
+    squad = tags.get("squad", resource.get("squad"))
+    with db() as conn:
+        conn.execute(
+            "UPDATE resources SET labels_json = ?, product = ?, squad = ? WHERE id = ?",
+            (json.dumps(labels), product, squad, resource_uid),
+        )
+    return get_resource(resource_uid)
+
+
+def update_resource_status(resource_uid: int, status: str) -> dict | None:
+    with db() as conn:
+        cur = conn.execute("UPDATE resources SET status = ? WHERE id = ?", (status, resource_uid))
+    return get_resource(resource_uid) if cur.rowcount else None
+
+
+def create_policy(policy: dict) -> dict:
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO automation_policies("
+            "id, name, resource_ids_json, selector_json, timezone, weekdays_json, "
+            "start_time, stop_time, expires_at, expiration_action, enabled, "
+            "require_approval, dry_run, created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                policy["id"],
+                policy["name"],
+                json.dumps(policy.get("resource_ids") or []),
+                json.dumps(policy.get("selector") or {}),
+                policy.get("timezone") or "UTC",
+                json.dumps(policy.get("weekdays") or [0, 1, 2, 3, 4]),
+                policy.get("start_time"),
+                policy.get("stop_time"),
+                policy.get("expires_at"),
+                policy.get("expiration_action") or "stop",
+                1 if policy.get("enabled", True) else 0,
+                1 if policy.get("require_approval", True) else 0,
+                1 if policy.get("dry_run", True) else 0,
+                now,
+                now,
+            ),
+        )
+    return get_policy(policy["id"])  # type: ignore[return-value]
+
+
+def list_policies() -> list[dict]:
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM automation_policies ORDER BY created_at DESC").fetchall()
+    return [_policy_dict(row) for row in rows]
+
+
+def get_policy(policy_id: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM automation_policies WHERE id = ?", (policy_id,)).fetchone()
+    return _policy_dict(row) if row else None
+
+
+def update_policy(policy_id: str, changes: dict) -> dict | None:
+    current = get_policy(policy_id)
+    if not current:
+        return None
+    merged = {**current, **{key: value for key, value in changes.items() if value is not None}}
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "UPDATE automation_policies SET name = ?, resource_ids_json = ?, selector_json = ?, "
+            "timezone = ?, weekdays_json = ?, start_time = ?, stop_time = ?, expires_at = ?, "
+            "expiration_action = ?, enabled = ?, require_approval = ?, dry_run = ?, updated_at = ? "
+            "WHERE id = ?",
+            (
+                merged["name"], json.dumps(merged["resource_ids"]), json.dumps(merged["selector"]),
+                merged["timezone"], json.dumps(merged["weekdays"]), merged.get("start_time"),
+                merged.get("stop_time"), merged.get("expires_at"), merged["expiration_action"],
+                1 if merged["enabled"] else 0, 1 if merged["require_approval"] else 0,
+                1 if merged["dry_run"] else 0, now, policy_id,
+            ),
+        )
+    return get_policy(policy_id)
+
+
+def delete_policy(policy_id: str) -> bool:
+    with db() as conn:
+        cur = conn.execute("DELETE FROM automation_policies WHERE id = ?", (policy_id,))
+    return cur.rowcount > 0
+
+
+def create_action(action: dict) -> dict:
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO action_runs(id, policy_id, resource_uid, action, status, scheduled_for, "
+            "reason, result_message, dry_run, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (action["id"], action.get("policy_id"), action["resource_uid"], action["action"],
+             action["status"], action.get("scheduled_for"), action.get("reason"),
+             action.get("result_message"), 1 if action.get("dry_run", True) else 0, now, now),
+        )
+    return get_action(action["id"])  # type: ignore[return-value]
+
+
+def list_actions(status: str | None = None) -> list[dict]:
+    with db() as conn:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM action_runs WHERE status = ? ORDER BY created_at DESC", (status,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM action_runs ORDER BY created_at DESC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_action(action_id: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM action_runs WHERE id = ?", (action_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def update_action(action_id: str, *, status: str, result_message: str | None = None) -> dict | None:
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        cur = conn.execute(
+            "UPDATE action_runs SET status = ?, result_message = ?, updated_at = ? WHERE id = ?",
+            (status, result_message, now, action_id),
+        )
+    return get_action(action_id) if cur.rowcount else None
+
+
+def add_audit_event(event_type: str, subject: str, payload: dict) -> None:
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO audit_events(event_type, subject, payload_json, created_at) VALUES (?, ?, ?, ?)",
+            (event_type, subject, json.dumps(payload), datetime.utcnow().isoformat() + "Z"),
+        )
+
+
+def create_budget_rule(rule: dict) -> dict:
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO budget_rules(id, name, scope_type, scope_value, amount, currency, "
+            "window_days, warning_threshold, critical_threshold, response_mode, owner, "
+            "resource_ids_json, dry_run, enabled, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                rule["id"], rule["name"], rule["scope_type"], rule["scope_value"],
+                rule["amount"], rule.get("currency") or "BRL", rule.get("window_days") or 30,
+                rule.get("warning_threshold", 0.8), rule.get("critical_threshold", 1.0),
+                rule.get("response_mode") or "notify", rule.get("owner"),
+                json.dumps(rule.get("resource_ids") or []),
+                1 if rule.get("dry_run", True) else 0,
+                1 if rule.get("enabled", True) else 0, now, now,
+            ),
+        )
+    return get_budget_rule(rule["id"])  # type: ignore[return-value]
+
+
+def list_budget_rules() -> list[dict]:
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM budget_rules ORDER BY created_at DESC").fetchall()
+    return [_budget_rule_dict(row) for row in rows]
+
+
+def get_budget_rule(rule_id: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM budget_rules WHERE id = ?", (rule_id,)).fetchone()
+    return _budget_rule_dict(row) if row else None
+
+
+def update_budget_rule(rule_id: str, changes: dict) -> dict | None:
+    current = get_budget_rule(rule_id)
+    if not current:
+        return None
+    merged = {**current, **{key: value for key, value in changes.items() if value is not None}}
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "UPDATE budget_rules SET name = ?, scope_type = ?, scope_value = ?, amount = ?, "
+            "currency = ?, window_days = ?, warning_threshold = ?, critical_threshold = ?, "
+            "response_mode = ?, owner = ?, resource_ids_json = ?, dry_run = ?, enabled = ?, "
+            "updated_at = ? WHERE id = ?",
+            (
+                merged["name"], merged["scope_type"], merged["scope_value"], merged["amount"],
+                merged["currency"], merged["window_days"], merged["warning_threshold"],
+                merged["critical_threshold"], merged["response_mode"], merged.get("owner"),
+                json.dumps(merged["resource_ids"]), 1 if merged["dry_run"] else 0,
+                1 if merged["enabled"] else 0, now, rule_id,
+            ),
+        )
+    return get_budget_rule(rule_id)
+
+
+def delete_budget_rule(rule_id: str) -> bool:
+    with db() as conn:
+        cur = conn.execute("DELETE FROM budget_rules WHERE id = ?", (rule_id,))
+    return cur.rowcount > 0
+
+
+def budget_spend(scope_type: str, scope_value: str, days: int) -> dict:
+    columns = {
+        "project": "account",
+        "account": "account",
+        "product": "product",
+        "provider": "provider",
+        "resource": "resource_id",
+    }
+    column = columns.get(scope_type)
+    if not column:
+        raise ValueError(f"Unsupported budget scope: {scope_type}")
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT date, ROUND(SUM(amount), 4) AS amount FROM cost_records "
+            f"WHERE {column} = ? AND date >= date('now', ?) GROUP BY date ORDER BY date",
+            (scope_value, f"-{days - 1} days"),
+        ).fetchall()
+    daily = [{"date": row["date"], "amount": float(row["amount"])} for row in rows]
+    actual = sum(item["amount"] for item in daily)
+    observed_days = len(daily)
+    projected = actual / observed_days * days if observed_days else 0.0
+    return {
+        "actual": round(actual, 2),
+        "projected": round(projected, 2),
+        "observed_days": observed_days,
+        "daily": daily,
+    }
+
+
+def create_budget_event(event: dict) -> dict:
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO budget_events(id, rule_id, dedupe_key, level, status, actual_cost, "
+            "projected_cost, usage_pct, period_start, period_end, action_ids_json, message, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                event["id"], event["rule_id"], event["dedupe_key"], event["level"],
+                event["status"], event["actual_cost"], event["projected_cost"], event["usage_pct"],
+                event["period_start"], event["period_end"], json.dumps(event.get("action_ids") or []),
+                event["message"], now,
+            ),
+        )
+    return get_budget_event(event["id"])  # type: ignore[return-value]
+
+
+def get_budget_event(event_id: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM budget_events WHERE id = ?", (event_id,)).fetchone()
+    return _budget_event_dict(row) if row else None
+
+
+def get_budget_event_by_dedupe(dedupe_key: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM budget_events WHERE dedupe_key = ?", (dedupe_key,)).fetchone()
+    return _budget_event_dict(row) if row else None
+
+
+def list_budget_events(rule_id: str | None = None) -> list[dict]:
+    with db() as conn:
+        if rule_id:
+            rows = conn.execute(
+                "SELECT * FROM budget_events WHERE rule_id = ? ORDER BY created_at DESC", (rule_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM budget_events ORDER BY created_at DESC").fetchall()
+    return [_budget_event_dict(row) for row in rows]
+
+
+def upsert_alert(row: dict) -> None:
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO alerts(id, severity, category, product, title, message, status, detected_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+            "severity = excluded.severity, title = excluded.title, message = excluded.message, "
+            "status = excluded.status, detected_at = excluded.detected_at",
+            (
+                row["id"], row["severity"], row.get("category") or "budget", row.get("product"),
+                row["title"], row.get("message"), row.get("status") or "open",
+                row.get("detected_at") or datetime.utcnow().isoformat() + "Z",
+            ),
+        )
+
+
+def _budget_rule_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"], "name": row["name"], "scope_type": row["scope_type"],
+        "scope_value": row["scope_value"], "amount": row["amount"], "currency": row["currency"],
+        "window_days": row["window_days"], "warning_threshold": row["warning_threshold"],
+        "critical_threshold": row["critical_threshold"], "response_mode": row["response_mode"],
+        "owner": row["owner"], "resource_ids": json.loads(row["resource_ids_json"] or "[]"),
+        "dry_run": bool(row["dry_run"]), "enabled": bool(row["enabled"]),
+        "created_at": row["created_at"], "updated_at": row["updated_at"],
+    }
+
+
+def _budget_event_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"], "rule_id": row["rule_id"], "level": row["level"],
+        "status": row["status"], "actual_cost": row["actual_cost"],
+        "projected_cost": row["projected_cost"], "usage_pct": row["usage_pct"],
+        "period_start": row["period_start"], "period_end": row["period_end"],
+        "action_ids": json.loads(row["action_ids_json"] or "[]"),
+        "message": row["message"], "created_at": row["created_at"],
+    }
+
+
+def _policy_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"], "name": row["name"],
+        "resource_ids": json.loads(row["resource_ids_json"] or "[]"),
+        "selector": json.loads(row["selector_json"] or "{}"),
+        "timezone": row["timezone"], "weekdays": json.loads(row["weekdays_json"] or "[]"),
+        "start_time": row["start_time"], "stop_time": row["stop_time"],
+        "expires_at": row["expires_at"], "expiration_action": row["expiration_action"],
+        "enabled": bool(row["enabled"]), "require_approval": bool(row["require_approval"]),
+        "dry_run": bool(row["dry_run"]), "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
 
 
 def latest_metrics(product: str | None = None) -> list[dict]:

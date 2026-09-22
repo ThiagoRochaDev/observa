@@ -154,10 +154,54 @@ export const api = {
     }),
   costSummary: (days = 30) => req<CostSummary>(`/api/costs/summary?days=${days}`),
   costTrend: (days = 30) => req<TrendPoint[]>(`/api/costs/trend?days=${days}`),
+  budgets: () => req<BudgetRule[]>('/api/budgets'),
+  createBudget: (body: Omit<BudgetRule, 'id' | 'created_at' | 'updated_at'>) =>
+    req<BudgetRule>('/api/budgets', { method: 'POST', body: JSON.stringify(body) }),
+  deleteBudget: (id: string) =>
+    req<{ ok: boolean }>(`/api/budgets/${id}`, { method: 'DELETE' }),
+  evaluateBudgets: () =>
+    req<BudgetEvaluation>('/api/budgets/evaluate', { method: 'POST', body: '{}' }),
+  monitorBudgets: () =>
+    req<{ synced: { connection_id: string; status: string }[]; failed: unknown[]; evaluation: BudgetEvaluation }>(
+      '/api/budgets/monitor', { method: 'POST', body: '{}' },
+    ),
+  budgetEvents: (ruleId?: string) =>
+    req<BudgetEvent[]>(`/api/budgets/events${ruleId ? `?rule_id=${encodeURIComponent(ruleId)}` : ''}`),
   products: () => req<Product[]>('/api/products'),
   product: (slug: string) => req<ProductDetail>(`/api/products/${encodeURIComponent(slug)}`),
   resources: (product?: string) =>
     req<Resource[]>(`/api/resources${product ? `?product=${encodeURIComponent(product)}` : ''}`),
+  untaggedResources: () => req<Resource[]>('/api/resources?untagged=true'),
+  updateResourceTags: (
+    uid: number,
+    tags: Record<string, string>,
+    options: { dry_run?: boolean; write_back?: boolean } = {},
+  ) =>
+    req<TagUpdateResult>(`/api/resources/${uid}/tags`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        tags,
+        dry_run: options.dry_run ?? true,
+        write_back: options.write_back ?? true,
+      }),
+    }),
+  policies: () => req<AutomationPolicy[]>('/api/automation/policies'),
+  createPolicy: (body: Omit<AutomationPolicy, 'id' | 'created_at' | 'updated_at'>) =>
+    req<AutomationPolicy>('/api/automation/policies', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  actions: (status?: string) =>
+    req<AutomationAction[]>(
+      `/api/automation/actions${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+    ),
+  approveAction: (id: string) =>
+    req<AutomationAction>(`/api/automation/actions/${id}/approve`, { method: 'POST', body: '{}' }),
+  rejectAction: (id: string, reason: string) =>
+    req<AutomationAction>(`/api/automation/actions/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   observability: () => req<ObservabilityOverview>('/api/observability'),
   metricSeries: (name: string, product?: string) => {
     const q = new URLSearchParams({ name })
@@ -271,6 +315,54 @@ export type TrendPoint = {
   gitlab?: number
 }
 
+export type BudgetRule = {
+  id: string
+  name: string
+  scope_type: string
+  scope_value: string
+  amount: number
+  currency: string
+  window_days: number
+  warning_threshold: number
+  critical_threshold: number
+  response_mode: 'notify' | 'approval' | 'ignore'
+  owner?: string | null
+  resource_ids: number[]
+  dry_run: boolean
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export type BudgetEvent = {
+  id: string
+  rule_id: string
+  level: string
+  status: string
+  actual_cost: number
+  projected_cost: number
+  usage_pct: number
+  period_start: string
+  period_end: string
+  action_ids: string[]
+  message: string
+  created_at: string
+}
+
+export type BudgetEvaluation = {
+  evaluated_at: string
+  count: number
+  created: BudgetEvent[]
+  rules: {
+    rule_id: string
+    level: string
+    actual_cost: number
+    projected_cost: number
+    usage_pct: number
+    observed_days: number
+  }[]
+}
+
 export type Product = {
   slug: string
   name?: string
@@ -291,6 +383,8 @@ export type ProductDetail = Product & {
 }
 
 export type Resource = {
+  uid: number
+  connection_id: string
   provider: string
   type: string
   id: string
@@ -300,6 +394,42 @@ export type Resource = {
   squad?: string
   status?: string
   labels?: Record<string, string>
+}
+
+export type TagUpdateResult = {
+  ok: boolean
+  dry_run: boolean
+  message: string
+  resource: Resource
+}
+
+export type AutomationPolicy = {
+  id: string
+  name: string
+  resource_ids: number[]
+  selector: Record<string, string>
+  timezone: string
+  weekdays: number[]
+  start_time?: string | null
+  stop_time?: string | null
+  expires_at?: string | null
+  expiration_action: string
+  enabled: boolean
+  require_approval: boolean
+  dry_run: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export type AutomationAction = {
+  id: string
+  policy_id?: string
+  resource_uid: number
+  action: string
+  status: string
+  scheduled_for?: string
+  reason?: string
+  result_message?: string
 }
 
 export type MetricSample = {

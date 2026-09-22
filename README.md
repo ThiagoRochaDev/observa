@@ -23,6 +23,9 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
   - [Observability pages](#8-observability-pages-apm-logs-traces-monitors-rum-gcp)
   - [Authentication](#9-authentication)
 - [Supported connectors](#supported-connectors)
+- [Governance, CLI and mobile](#governance-cli-and-mobile)
+- [Budget guardrails](docs/BUDGET_GUARDRAILS.md)
+- [Complete testing guide](docs/TESTING_GUIDE.md)
 - [Architecture](#architecture)
 - [Principles](#principles)
 - [License](#license)
@@ -148,11 +151,27 @@ Regardless of mode, every `/api` request already requires the shared API key des
 
 Don't see your tool? The **Custom / On-premise (HTTP)** connector polls any internal endpoint that returns JSON in Observa's `cost`/`resource`/`metric` shape — the fastest way to wire up something in-house without writing a new connector.
 
+## Governance, CLI and mobile
+
+The **Governance** screen maps resources without ownership tags, writes supported tags back to
+the cloud, creates business-hour schedules and expiration dates, and presents pending actions for
+approval. Mutations are dry-run and approval-first by default.
+
+The same workflows are available through the `observa` CLI in `apps/cli` and the Expo mobile app
+in `apps/mobile`. See [docs/GOVERNANCE.md](docs/GOVERNANCE.md) for commands, API examples, the
+scheduler contract and connector support.
+
+Cost limits and projected-spend guardrails are available in **Budgets**. Rules can notify, record
+an intentional exception, or create shutdown actions that remain pending until an owner approves
+them. See [docs/BUDGET_GUARDRAILS.md](docs/BUDGET_GUARDRAILS.md).
+
 ## Architecture
 
 ```
 observa/
 ├── apps/api/          # FastAPI core — connector registry, sync, REST API, encrypted credential store
+├── apps/cli/          # Python CLI for inventory, tags, policies and approvals
+├── apps/mobile/       # Expo app for cost visibility and approvals
 │   ├── Dockerfile
 │   └── tests/
 ├── apps/web/          # Next.js UI

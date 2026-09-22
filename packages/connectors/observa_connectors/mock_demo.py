@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from observa_connectors.base import (
+    ActionResult,
     BaseConnector,
     CostSignal,
     MetricSignal,
@@ -303,6 +304,30 @@ class MockDemoConnector(BaseConnector):
                 f"{len(metrics)} metric samples, {len(DEMO_PRODUCTS)} products"
             ),
         )
+
+    def apply_tags(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        resource: dict[str, Any],
+        tags: dict[str, str],
+        dry_run: bool = True,
+    ) -> ActionResult:
+        mode = "would update" if dry_run else "updated"
+        return ActionResult(ok=True, message=f"Mock resource {mode} with {len(tags)} tag(s)")
+
+    def change_power_state(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        resource: dict[str, Any],
+        action: str,
+        dry_run: bool = True,
+    ) -> ActionResult:
+        mode = "would be" if dry_run else "was"
+        return ActionResult(ok=True, message=f"Mock resource {mode} {action}ped")
 
 
 def demo_alerts() -> list[dict[str, Any]]:

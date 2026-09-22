@@ -3,14 +3,21 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from observa_connectors.base import BaseConnector, CostSignal, PullResult, ResourceSignal, TestResult
+from observa_connectors.base import (
+    ActionResult,
+    BaseConnector,
+    CostSignal,
+    PullResult,
+    ResourceSignal,
+    TestResult,
+)
 
 
 class AwsCostConnector(BaseConnector):
     id = "aws-cost"
     name = "AWS (Cost Explorer)"
     description = "Daily cost by service via AWS Cost Explorer, plus a light EC2/RDS inventory."
-    capabilities = ["cost", "inventory"]
+    capabilities = ["cost", "inventory", "tags:write", "power:write"]
     category = "cloud"
     icon = "aws"
     docs_url = "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html"
@@ -111,3 +118,43 @@ class AwsCostConnector(BaseConnector):
             pass  # inventory is best-effort; cost data above already succeeded
 
         return PullResult(costs=costs, resources=resources)
+
+    def apply_tags(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        resource: dict[str, Any],
+        tags: dict[str, str],
+        dry_run: bool = True,
+    ) -> ActionResult:
+        if resource.get("type") != "ec2_instance":
+            raise NotImplementedError("AWS tag write-back currently supports EC2 instances")
+        if not dry_run:
+            self._client(config, secrets, "ec2").create_tags(
+                Resources=[resource["id"]],
+                Tags=[{"Key": key, "Value": value} for key, value in tags.items()],
+            )
+        return ActionResult(
+            ok=True,
+            message=("Validated" if dry_run else "Applied") + f" {len(tags)} EC2 tag(s)",
+        )
+
+    def change_power_state(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        resource: dict[str, Any],
+        action: str,
+        dry_run: bool = True,
+    ) -> ActionResult:
+        if resource.get("type") != "ec2_instance":
+            raise NotImplementedError("AWS power actions currently support EC2 instances")
+        if action not in {"start", "stop"}:
+            raise ValueError("Action must be start or stop")
+        if not dry_run:
+            ec2 = self._client(config, secrets, "ec2")
+            operation = ec2.start_instances if action == "start" else ec2.stop_instances
+            operation(InstanceIds=[resource["id"]])
+        return ActionResult(ok=True, message=f"EC2 {action} {'validated' if dry_run else 'requested'}")

@@ -108,3 +108,178 @@ def test_auth_settings_roundtrip(client):
     r = client.put("/api/auth/settings", json={"mode": "local", "providers": {}})
     assert r.status_code == 200
     assert r.json()["ok"] is True
+
+
+def test_resource_tags_support_preview_and_apply(client):
+    resource = client.get("/api/resources").json()[0]
+
+    preview = client.patch(
+        f"/api/resources/{resource['uid']}/tags",
+        json={"tags": {"owner": "platform", "product": "observa"}, "dry_run": True},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["dry_run"] is True
+
+    applied = client.patch(
+        f"/api/resources/{resource['uid']}/tags",
+        json={"tags": {"owner": "platform", "product": "observa"}, "dry_run": False},
+    )
+    assert applied.status_code == 200
+    assert applied.json()["resource"]["labels"]["owner"] == "platform"
+    assert applied.json()["resource"]["product"] == "observa"
+
+
+def test_policy_schedules_action_and_approval_simulates(client):
+    resource = client.get("/api/resources").json()[0]
+    created = client.post(
+        "/api/automation/policies",
+        json={
+            "name": "Stop demo at night",
+            "resource_ids": [resource["uid"]],
+            "timezone": "UTC",
+            "weekdays": [0],
+            "stop_time": "20:00",
+            "require_approval": True,
+            "dry_run": True,
+        },
+    )
+    assert created.status_code == 200
+
+    run = client.post("/api/automation/run-due", json={"at": "2026-09-14T20:00:00Z"})
+    assert run.status_code == 200
+    assert run.json()["count"] == 1
+    action = run.json()["created"][0]
+    assert action["status"] == "pending_approval"
+
+    approved = client.post(f"/api/automation/actions/{action['id']}/approve")
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "simulated"
+
+
+def test_policy_requires_scope(client):
+    response = client.post("/api/automation/policies", json={"name": "Invalid"})
+    assert response.status_code == 400
+
+
+def test_scheduler_accepts_empty_body(client):
+    response = client.post("/api/automation/run-due")
+    assert response.status_code == 200
+    assert "created" in response.json()
+
+
+def test_resource_identity_survives_connector_sync(client):
+    before = client.get("/api/resources").json()
+    identity = {(row["provider"], row["id"]): row["uid"] for row in before}
+    connection_id = before[0]["connection_id"]
+
+    response = client.post(f"/api/connections/{connection_id}/sync")
+    assert response.status_code == 200
+
+    after = client.get("/api/resources").json()
+    assert {(row["provider"], row["id"]): row["uid"] for row in after} == identity
+
+
+def test_budget_exceeded_creates_approval_action_and_deduplicates(client):
+    resource = next(row for row in client.get("/api/resources").json() if row["product"] == "hiperlocal")
+    created = client.post(
+        "/api/budgets",
+        json={
+            "name": "Hiperlocal guardrail",
+            "scope_type": "product",
+            "scope_value": "hiperlocal",
+            "amount": 1,
+            "window_days": 30,
+            "warning_threshold": 0.8,
+            "critical_threshold": 1.0,
+            "response_mode": "approval",
+            "owner": "squad-hiperlocal",
+            "resource_ids": [resource["uid"]],
+            "dry_run": True,
+        },
+    )
+    assert created.status_code == 200
+    rule = created.json()
+
+    evaluated = client.post("/api/budgets/evaluate", json={"at": "2026-09-17"})
+    assert evaluated.status_code == 200
+    event = next(item for item in evaluated.json()["created"] if item["rule_id"] == rule["id"])
+    assert event["level"] == "critical"
+    assert event["status"] == "pending_approval"
+    assert len(event["action_ids"]) == 1
+
+    duplicate = client.post("/api/budgets/evaluate", json={"at": "2026-09-17"})
+    assert duplicate.status_code == 200
+    assert not any(item["rule_id"] == rule["id"] for item in duplicate.json()["created"])
+
+    approved = client.post(f"/api/automation/actions/{event['action_ids'][0]}/approve")
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "simulated"
+
+
+def test_budget_ignore_records_event_without_action(client):
+    created = client.post(
+        "/api/budgets",
+        json={
+            "name": "Ignored provider budget",
+            "scope_type": "provider",
+            "scope_value": "gcp",
+            "amount": 1,
+            "response_mode": "ignore",
+        },
+    )
+    assert created.status_code == 200
+    rule_id = created.json()["id"]
+
+    evaluated = client.post("/api/budgets/evaluate", json={"at": "2026-09-18"})
+    event = next(item for item in evaluated.json()["created"] if item["rule_id"] == rule_id)
+    assert event["status"] == "ignored"
+    assert event["action_ids"] == []
+
+
+def test_budget_approval_requires_owner(client):
+    response = client.post(
+        "/api/budgets",
+        json={
+            "name": "Invalid approval budget",
+            "scope_type": "product",
+            "scope_value": "hiperlocal",
+            "amount": 100,
+            "response_mode": "approval",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_budget_warning_starts_preventive_approval(client):
+    product = client.get("/api/products/hiperlocal").json()
+    resource = product["resources"][0]
+    amount_for_ninety_percent = product["total_brl"] / 0.9
+    created = client.post(
+        "/api/budgets",
+        json={
+            "name": "Preventive hiperlocal cap",
+            "scope_type": "product",
+            "scope_value": "hiperlocal",
+            "amount": amount_for_ninety_percent,
+            "warning_threshold": 0.8,
+            "critical_threshold": 1.0,
+            "response_mode": "approval",
+            "owner": "squad-hiperlocal",
+            "resource_ids": [resource["uid"]],
+        },
+    )
+    rule_id = created.json()["id"]
+
+    evaluated = client.post("/api/budgets/evaluate", json={"at": "2026-09-19"}).json()
+    event = next(item for item in evaluated["created"] if item["rule_id"] == rule_id)
+    assert event["level"] == "warning"
+    assert event["status"] == "pending_approval"
+    assert len(event["action_ids"]) == 1
+
+
+def test_budget_monitor_syncs_cost_connectors_before_evaluation(client):
+    response = client.post("/api/budgets/monitor", json={"at": "2026-09-20"})
+    assert response.status_code == 200
+    body = response.json()
+    assert any(item["status"] == "ok" for item in body["synced"])
+    assert "evaluation" in body

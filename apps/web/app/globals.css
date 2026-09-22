@@ -3399,6 +3399,11 @@ textarea {
 .span-dur { font-size: 0.72rem; text-align: right; }
 .row-selected td { background: var(--bg-hover); }
 
+.governance-form { margin-top: 1rem; }
+.governance-actions { margin-top: 1.15rem; overflow-x: auto; }
+.budget-rules, .budget-events { max-height: 72vh; overflow-y: auto; }
+.budget-item { display: grid; gap: 0.45rem; padding: 0.85rem 0; border-bottom: 1px solid var(--border); }
+
 /* Badge state modifiers (sync status, alert severity) — same score-* palette */
 .badge.ok { color: var(--success); border-color: #1d5c4a; }
 .badge.fail, .badge.high { color: var(--danger); border-color: #6a3030; }
