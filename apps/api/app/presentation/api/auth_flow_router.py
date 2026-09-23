@@ -18,7 +18,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def auth_mode():
     """Public: lets the frontend's login gate decide what to render (paste-a-key
     form vs "Continue with Google/GitLab" buttons) before it has any credential."""
-    auth = db.get_setting("auth") or {"mode": "local", "providers": {}}
+    auth = db.get_global_setting("auth") or {"mode": "local", "providers": {}}
     enabled = [
         key for key, cfg in (auth.get("providers") or {}).items()
         if cfg.get("enabled") and cfg.get("client_id")
@@ -28,7 +28,7 @@ def auth_mode():
 
 @router.get("/authorize/{provider}")
 async def authorize(provider: str):
-    auth = db.get_setting("auth") or {}
+    auth = db.get_global_setting("auth") or {}
     cfg = (auth.get("providers") or {}).get(provider) or {}
     redirect_uri = cfg.get("redirect_uri") or f"http://localhost:8080/auth/callback/{provider}"
     try:
@@ -52,7 +52,7 @@ async def callback(
     if not code or not state or not session.verify_state_token(state, provider=provider):
         return RedirectResponse(f"{frontend}/auth/callback?error=invalid_state")
 
-    auth = db.get_setting("auth") or {}
+    auth = db.get_global_setting("auth") or {}
     cfg = (auth.get("providers") or {}).get(provider) or {}
     redirect_uri = cfg.get("redirect_uri") or f"http://localhost:8080/auth/callback/{provider}"
 

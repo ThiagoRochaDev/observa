@@ -16,24 +16,36 @@ import {
 type Summary = { total: number; change_pct: number; open_alerts: number }
 type Resource = { uid: number; provider: string; name?: string; id: string; product?: string }
 type Action = { id: string; action: string; resource_uid: number; status: string; reason?: string }
+type Remediation = { id: string; title: string; status: string; diagnosis: string; recommendation: string }
 
 const KEY = 'observa_api_key'
+const COMPANY_KEY = 'observa_company_id'
+const TENANCY_KEY = 'observa_tenancy_id'
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState('http://10.0.2.2:8080')
   const [apiKey, setApiKey] = useState('')
   const [savedKey, setSavedKey] = useState('')
+  const [companyId, setCompanyId] = useState('cmp_default')
+  const [tenancyId, setTenancyId] = useState('tnt_default')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [resources, setResources] = useState<Resource[]>([])
   const [actions, setActions] = useState<Action[]>([])
+  const [remediations, setRemediations] = useState<Remediation[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    SecureStore.getItemAsync(KEY).then((value) => {
-      if (value) {
-        setApiKey(value)
-        setSavedKey(value)
+    Promise.all([
+      SecureStore.getItemAsync(KEY),
+      SecureStore.getItemAsync(COMPANY_KEY),
+      SecureStore.getItemAsync(TENANCY_KEY),
+    ]).then(([key, company, tenancy]) => {
+      if (company) setCompanyId(company)
+      if (tenancy) setTenancyId(tenancy)
+      if (key) {
+        setApiKey(key)
+        setSavedKey(key)
       }
     })
   }, [])
@@ -45,7 +57,13 @@ export default function App() {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${apiUrl.replace(/\/$/, '')}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', 'X-Observa-Api-Key': savedKey, ...init?.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Observa-Api-Key': savedKey,
+        'X-Observa-Company-ID': companyId,
+        'X-Observa-Tenancy-ID': tenancyId,
+        ...init?.headers,
+      },
     })
     if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`)
     return response.json()
@@ -55,14 +73,16 @@ export default function App() {
     setLoading(true)
     setError('')
     try {
-      const [cost, unmapped, pending] = await Promise.all([
+      const [cost, unmapped, pending, proposed] = await Promise.all([
         request<Summary>('/api/costs/summary'),
         request<Resource[]>('/api/resources?untagged=true'),
         request<Action[]>('/api/automation/actions?status=pending_approval'),
+        request<Remediation[]>('/api/remediations?status=suggested'),
       ])
       setSummary(cost)
       setResources(unmapped)
       setActions(pending)
+      setRemediations(proposed)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -71,12 +91,24 @@ export default function App() {
   }
 
   async function login() {
-    await SecureStore.setItemAsync(KEY, apiKey.trim())
+    await Promise.all([
+      SecureStore.setItemAsync(KEY, apiKey.trim()),
+      SecureStore.setItemAsync(COMPANY_KEY, companyId.trim()),
+      SecureStore.setItemAsync(TENANCY_KEY, tenancyId.trim()),
+    ])
     setSavedKey(apiKey.trim())
   }
 
   async function decide(actionId: string, approve: boolean) {
     await request(`/api/automation/actions/${actionId}/${approve ? 'approve' : 'reject'}`, {
+      method: 'POST',
+      body: approve ? '{}' : JSON.stringify({ reason: 'Rejeitado no app mobile' }),
+    })
+    await refresh()
+  }
+
+  async function decideRemediation(proposalId: string, approve: boolean) {
+    await request(`/api/remediations/${proposalId}/${approve ? 'approve' : 'reject'}`, {
       method: 'POST',
       body: approve ? '{}' : JSON.stringify({ reason: 'Rejeitado no app mobile' }),
     })
@@ -100,6 +132,22 @@ export default function App() {
             secureTextEntry
             autoCapitalize="none"
           />
+          <TextInput
+            style={styles.input}
+            value={companyId}
+            onChangeText={setCompanyId}
+            placeholder="Company ID"
+            placeholderTextColor="#718096"
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            value={tenancyId}
+            onChangeText={setTenancyId}
+            placeholder="Tenancy ID"
+            placeholderTextColor="#718096"
+            autoCapitalize="none"
+          />
           <Pressable style={styles.primaryButton} onPress={login}><Text style={styles.primaryText}>Conectar</Text></Pressable>
         </View>
       </SafeAreaView>
@@ -115,6 +163,7 @@ export default function App() {
       >
         <Text style={styles.brand}>Observa</Text>
         <Text style={styles.subtitle}>Custos, recursos e aprovações</Text>
+        <Text style={styles.context}>Company {companyId} · Tenancy {tenancyId}</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !summary ? <ActivityIndicator color="#59d9b5" /> : null}
 
@@ -141,6 +190,19 @@ export default function App() {
           <View style={styles.card} key={resource.uid}>
             <Text style={styles.cardTitle}>{resource.name || resource.id}</Text>
             <Text style={styles.cardText}>{resource.provider} · #{resource.uid}</Text>
+          </View>
+        ))}
+
+        <Text style={styles.sectionTitle}>Remediações sugeridas</Text>
+        {remediations.length === 0 ? <Empty text="Nenhuma correção aguardando aprovação." /> : remediations.map((proposal) => (
+          <View style={styles.card} key={proposal.id}>
+            <Text style={styles.cardTitle}>{proposal.title}</Text>
+            <Text style={styles.cardText}>{proposal.diagnosis}</Text>
+            <Text style={styles.cardText}>{proposal.recommendation}</Text>
+            <View style={styles.actions}>
+              <Pressable style={styles.primaryButton} onPress={() => decideRemediation(proposal.id, true)}><Text style={styles.primaryText}>Aprovar dry-run</Text></Pressable>
+              <Pressable style={styles.dangerButton} onPress={() => decideRemediation(proposal.id, false)}><Text style={styles.dangerText}>Rejeitar</Text></Pressable>
+            </View>
           </View>
         ))}
       </ScrollView>
@@ -180,4 +242,5 @@ const styles = StyleSheet.create({
   dangerButton: { borderColor: '#f87171', borderWidth: 1, borderRadius: 9, paddingVertical: 10, paddingHorizontal: 16 },
   dangerText: { color: '#f87171', fontWeight: '700' },
   error: { color: '#f87171', marginBottom: 12 },
+  context: { color: '#59d9b5', fontSize: 12, marginTop: -14, marginBottom: 18 },
 })

@@ -5,8 +5,8 @@
   "license": "Apache-2.0",
   "author": "Thiago G. Rocha <thiago.g.rocha@hotmail.com> (TGR Technology)",
   "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "next build",
+    "dev": "next dev --webpack -p 3000",
+    "build": "next build --webpack",
     "start": "next start -p 3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"

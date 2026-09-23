@@ -27,6 +27,17 @@ Credentials are encrypted at rest (Fernet, `app/core/crypto.py`) — never logge
 3. Implement `test_connection` and `pull` — use `observa_connectors.http.request_json` for REST APIs.
 4. Register the instance in `registry.py`.
 
+External packages do not need to change Observa's repository. Publish the connector
+through Python's entry-point mechanism and install it in the API image/environment:
+
+```toml
+[project.entry-points."observa.connectors"]
+my-tool = "my_observa_connector:MyToolConnector"
+```
+
+The registry discovers entry points at runtime. A plugin may expose one `BaseConnector`
+instance/class or a list of instances; duplicate IDs never override built-in connectors.
+
 ## Catalog
 
 ### Cloud

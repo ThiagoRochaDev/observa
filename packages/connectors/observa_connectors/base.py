@@ -52,10 +52,25 @@ class MetricSignal:
 
 
 @dataclass
+class LogSignal:
+    """observa.log.v1"""
+
+    ts: datetime
+    severity: str
+    source: str
+    message: str
+    product: str | None = None
+    service: str | None = None
+    trace_id: str | None = None
+    labels: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class PullResult:
     costs: list[CostSignal] = field(default_factory=list)
     resources: list[ResourceSignal] = field(default_factory=list)
     metrics: list[MetricSignal] = field(default_factory=list)
+    logs: list[LogSignal] = field(default_factory=list)
     message: str = ""
 
 
@@ -129,3 +144,13 @@ class BaseConnector(ABC):
         dry_run: bool = True,
     ) -> ActionResult:
         raise NotImplementedError(f"Connector {self.id} does not support power actions")
+
+    def apply_remediation(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        proposal: dict[str, Any],
+        dry_run: bool = True,
+    ) -> ActionResult:
+        raise NotImplementedError(f"Connector {self.id} does not support remediation actions")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from importlib.metadata import entry_points
+
 from observa_connectors.base import BaseConnector
 from observa_connectors.mock_demo import MockDemoConnector
 from observa_connectors.providers.aws import AwsCostConnector
@@ -72,12 +74,31 @@ _CONNECTORS: list[BaseConnector] = [
 ]
 
 
+def _plugin_connectors() -> list[BaseConnector]:
+    discovered: list[BaseConnector] = []
+    for entry_point in entry_points(group="observa.connectors"):
+        try:
+            loaded = entry_point.load()
+            candidate = loaded() if isinstance(loaded, type) else loaded
+            values = candidate if isinstance(candidate, (list, tuple)) else [candidate]
+            discovered.extend(value for value in values if isinstance(value, BaseConnector))
+        except Exception:
+            continue
+    return discovered
+
+
 def list_connectors() -> list[BaseConnector]:
-    return list(_CONNECTORS)
+    connectors = list(_CONNECTORS)
+    known_ids = {connector.id for connector in connectors}
+    for connector in _plugin_connectors():
+        if connector.id not in known_ids:
+            connectors.append(connector)
+            known_ids.add(connector.id)
+    return connectors
 
 
 def get_connector(connector_id: str) -> BaseConnector | None:
-    for c in _CONNECTORS:
+    for c in list_connectors():
         if c.id == connector_id:
             return c
     return None

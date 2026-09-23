@@ -1,5 +1,7 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 const API_KEY_STORAGE = 'observa_api_key'
+const COMPANY_STORAGE = 'observa_company_id'
+const TENANCY_STORAGE = 'observa_tenancy_id'
 
 // Every /api route requires a shared key (see app/core/security.py) — the
 // operator pastes it once (ApiKeyGate) and it's kept in this browser only.
@@ -28,6 +30,21 @@ export function clearApiKey() {
   }
 }
 
+export function getCompanyId(): string {
+  if (typeof window === 'undefined') return ''
+  return window.localStorage.getItem(COMPANY_STORAGE) || ''
+}
+
+export function getTenancyId(): string {
+  if (typeof window === 'undefined') return ''
+  return window.localStorage.getItem(TENANCY_STORAGE) || ''
+}
+
+export function setTenantContext(companyId: string, tenancyId: string) {
+  window.localStorage.setItem(COMPANY_STORAGE, companyId)
+  window.localStorage.setItem(TENANCY_STORAGE, tenancyId)
+}
+
 export class ApiAuthError extends Error {}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -36,6 +53,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       'Content-Type': 'application/json',
       'X-Observa-Api-Key': getApiKey(),
+      ...(getCompanyId() ? { 'X-Observa-Company-ID': getCompanyId() } : {}),
+      ...(getTenancyId() ? { 'X-Observa-Tenancy-ID': getTenancyId() } : {}),
       ...(init?.headers || {}),
     },
     cache: 'no-store',
@@ -116,10 +135,25 @@ export const api = {
   // has any credential at all.
   authMode: () => req<{ mode: 'local' | 'oidc'; providers: string[] }>('/auth/mode'),
   authMe: () =>
-    req<{ mode: 'local' | 'oidc'; provider?: string; email?: string; name?: string }>(
+    req<{ mode: 'local' | 'oidc'; subject?: string; provider?: string; email?: string; name?: string }>(
       '/api/auth/me',
     ),
   health: () => req<Health>('/api/health'),
+  context: () => req<TenantContext>('/api/context'),
+  companies: () => req<Company[]>('/api/companies'),
+  createCompany: (body: { name: string; slug?: string }) =>
+    req<Company>('/api/companies', { method: 'POST', body: JSON.stringify(body) }),
+  tenancies: (companyId?: string) =>
+    req<Tenancy[]>(`/api/tenancies${companyId ? `?company_id=${encodeURIComponent(companyId)}` : ''}`),
+  createTenancy: (body: { company_id: string; name: string; slug?: string }) =>
+    req<Tenancy>('/api/tenancies', { method: 'POST', body: JSON.stringify(body) }),
+  companyMembers: (companyId: string) =>
+    req<CompanyMember[]>(`/api/companies/${companyId}/members`),
+  saveCompanyMember: (companyId: string, body: { subject: string; email?: string; role: string }) =>
+    req<CompanyMember>(`/api/companies/${companyId}/members`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
   seedDemo: () => req<Record<string, unknown>>('/api/demo/seed', { method: 'POST' }),
   connectors: () => req<Connector[]>('/api/connectors'),
   connections: () => req<Connection[]>('/api/connections'),
@@ -210,6 +244,25 @@ export const api = {
   },
   alerts: (status?: string) =>
     req<Alert[]>(`/api/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  remediations: (status?: string) =>
+    req<RemediationProposal[]>(
+      `/api/remediations${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+    ),
+  analyzeRemediations: (body: { executor_connection_id?: string; dry_run?: boolean } = {}) =>
+    req<{ logs_scanned: number; count: number; proposals: RemediationProposal[] }>(
+      '/api/remediations/analyze',
+      { method: 'POST', body: JSON.stringify({ dry_run: true, ...body }) },
+    ),
+  approveRemediation: (id: string) =>
+    req<RemediationProposal>(`/api/remediations/${id}/approve`, { method: 'POST', body: '{}' }),
+  rejectRemediation: (id: string, reason: string) =>
+    req<RemediationProposal>(`/api/remediations/${id}/reject`, {
+      method: 'POST', body: JSON.stringify({ reason }),
+    }),
+  remediationFeedback: (id: string, outcome: string, notes?: string) =>
+    req(`/api/remediations/${id}/feedback`, {
+      method: 'POST', body: JSON.stringify({ outcome, notes }),
+    }),
   ecosystem: (product = 'hiperlocal') =>
     req<Ecosystem>(`/api/ecosystem?product=${encodeURIComponent(product)}`),
   dashboards: () => req<DashboardMeta[]>('/api/dashboards'),
@@ -244,7 +297,38 @@ export type Health = {
   open_alerts?: number
   metric_series?: number
   auth_mode: string
+  company_id: string
+  tenancy_id: string
   demo?: boolean
+}
+
+export type Company = {
+  id: string
+  name: string
+  slug: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type Tenancy = {
+  id: string
+  company_id: string
+  name: string
+  slug: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type TenantContext = { company: Company; tenancy: Tenancy }
+
+export type CompanyMember = {
+  company_id: string
+  subject: string
+  email?: string | null
+  role: 'owner' | 'admin' | 'operator' | 'viewer'
+  created_at: string
 }
 
 export type Connector = {
@@ -467,6 +551,22 @@ export type Alert = {
   message?: string
   status: string
   detected_at: string
+}
+
+export type RemediationProposal = {
+  id: string
+  fingerprint: string
+  title: string
+  diagnosis: string
+  recommendation: string
+  action: Record<string, string>
+  evidence_count: number
+  executor_connection_id?: string | null
+  status: string
+  dry_run: boolean
+  result_message?: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type Ecosystem = {

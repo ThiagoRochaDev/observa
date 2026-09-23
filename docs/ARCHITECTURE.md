@@ -9,10 +9,10 @@ Self-hosted platform: **catalog + cost + observability signals** fed by **user-c
 | Layer | Role |
 |-------|------|
 | **Web** | Setup wizard, Connections, Auth settings, Catalog, Costs, Health |
-| **API core** | Org settings, RBAC, connection registry, sync orchestrator, query APIs |
+| **API core** | Company/tenancy context, org settings, connection registry, sync orchestrator, query APIs |
 | **Contracts** | Versioned signal schemas (`observa.*.v1`) |
-| **Connectors** | Plugins: `test`, `pull`, `capabilities` |
-| **Store** | SQLite locally (`data/observa.db`); Postgres later |
+| **Connectors** | Built-ins and `observa.connectors` plugins: `test`, `pull`, `capabilities` |
+| **Store** | Control catalog plus one isolated SQLite database per tenancy; Postgres for horizontal scale |
 
 ## Data flow
 
@@ -34,8 +34,15 @@ Stored in `settings` table (UI editable):
 
 Local mode: open access for MVP (single-user laptop). OIDC enforced when enabled.
 
-## Non-goals (MVP)
+## Portability
+
+- Local workstation or bare metal through Python/Node or Docker Compose.
+- Any VM through the same OCI images.
+- Kubernetes through `deploy/kubernetes/observa.yaml`.
+- Any cloud, cluster, SaaS or private environment through built-in, generic HTTP or plugin connectors.
+
+## Non-goals (current version)
 
 - Full Datadog replacement (logs/traces search)
-- Multi-tenant SaaS billing
+- Cross-company billing of the Observa platform itself
 - Shipping agents to every node (Prometheus/OTLP push comes later)

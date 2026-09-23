@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import secrets
 import stat
+from typing import Any
 
 from fastapi import Header, HTTPException
 
@@ -55,7 +56,7 @@ def get_or_create_api_key() -> str:
 def require_api_key(
     x_observa_api_key: str | None = Header(default=None, alias="X-Observa-Api-Key"),
     authorization: str | None = Header(default=None),
-) -> None:
+) -> dict[str, Any]:
     provided = x_observa_api_key
     if not provided and authorization and authorization.lower().startswith("bearer "):
         provided = authorization[7:]
@@ -64,7 +65,20 @@ def require_api_key(
 
     expected = get_or_create_api_key()
     if secrets.compare_digest(provided, expected):
-        return
-    if verify_session_token(provided) is not None:
-        return
+        return {
+            "type": "local",
+            "subject": "local:platform-admin",
+            "email": None,
+            "name": "Local platform administrator",
+            "is_platform_admin": True,
+        }
+    claims = verify_session_token(provided)
+    if claims is not None:
+        return {
+            "type": "oidc",
+            "subject": claims.get("sub"),
+            "email": claims.get("email"),
+            "name": claims.get("name"),
+            "is_platform_admin": False,
+        }
     raise HTTPException(status_code=401, detail="Missing or invalid API key")

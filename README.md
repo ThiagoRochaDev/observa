@@ -25,6 +25,10 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
 - [Supported connectors](#supported-connectors)
 - [Governance, CLI and mobile](#governance-cli-and-mobile)
 - [Budget guardrails](docs/BUDGET_GUARDRAILS.md)
+- [Companies and tenancies](docs/MULTITENANCY.md)
+- [Portable deployment](docs/DEPLOYMENT.md)
+- [Privacy and isolation](docs/PRIVACY_SECURITY.md)
+- [Log diagnosis and remediation](docs/REMEDIATION.md)
 - [Complete testing guide](docs/TESTING_GUIDE.md)
 - [Architecture](#architecture)
 - [Principles](#principles)
@@ -64,6 +68,10 @@ First run:
 1. Open **Connections** → pick **Mock Demo** → *Save connection* → *Sync*.
 2. Open **Overview** / **Products** to see the sample cost + catalog data light up.
 3. When you're ready, add your real connectors (below) and, later, SSO.
+
+Observa starts with a backward-compatible default company and tenancy. Create additional
+companies and isolated production/sandbox/business-unit tenancies under
+**Platform → Organizations**, then select the active context in the sidebar.
 
 ## User guide
 
@@ -151,6 +159,10 @@ Regardless of mode, every `/api` request already requires the shared API key des
 
 Don't see your tool? The **Custom / On-premise (HTTP)** connector polls any internal endpoint that returns JSON in Observa's `cost`/`resource`/`metric` shape — the fastest way to wire up something in-house without writing a new connector.
 
+Connector packages can also register themselves through the `observa.connectors` Python
+entry-point group and appear automatically in the catalog. See
+[docs/CONNECTORS.md](docs/CONNECTORS.md).
+
 ## Governance, CLI and mobile
 
 The **Governance** screen maps resources without ownership tags, writes supported tags back to
@@ -182,6 +194,7 @@ observa/
 │   ├── CONNECTORS.md  # Full connector catalog and how to add a new one
 │   └── screenshots/
 ├── scripts/dev-local.sh
+├── deploy/kubernetes/ # portable Kubernetes manifests
 ├── docker-compose.yml
 └── data/              # local SQLite + sync cache + secrets.key + api_key (gitignored)
 ```

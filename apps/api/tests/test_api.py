@@ -31,6 +31,96 @@ def test_api_requires_key(client):
     assert client.get("/api/health").status_code == 401
 
 
+def test_company_with_multiple_tenancies_isolates_data(client):
+    company_response = client.post(
+        "/api/companies", json={"name": "Acme Corp", "slug": "acme-corp"}
+    )
+    assert company_response.status_code == 200
+    company = company_response.json()
+
+    tenancy_a = client.post(
+        "/api/tenancies",
+        json={"company_id": company["id"], "name": "Production", "slug": "production"},
+    ).json()
+    tenancy_b = client.post(
+        "/api/tenancies",
+        json={"company_id": company["id"], "name": "Sandbox", "slug": "sandbox"},
+    ).json()
+    assert tenancy_a["company_id"] == company["id"]
+    assert tenancy_b["company_id"] == company["id"]
+
+    client.headers["X-Observa-Company-ID"] = company["id"]
+    client.headers["X-Observa-Tenancy-ID"] = tenancy_a["id"]
+    created = client.post(
+        "/api/connections",
+        json={"name": "Production Mock", "connector_id": "mock-demo", "config": {"days": 7}},
+    )
+    assert created.status_code == 200
+    assert len(client.get("/api/connections").json()) == 1
+    assert client.get("/api/context").json()["tenancy"]["id"] == tenancy_a["id"]
+
+    client.headers["X-Observa-Tenancy-ID"] = tenancy_b["id"]
+    assert client.get("/api/connections").json() == []
+    assert client.get("/api/resources").json() == []
+
+    client.headers["X-Observa-Company-ID"] = "cmp_wrong"
+    assert client.get("/api/connections").status_code == 409
+
+    client.headers.pop("X-Observa-Company-ID", None)
+    client.headers.pop("X-Observa-Tenancy-ID", None)
+
+
+def test_oidc_identity_cannot_discover_or_read_unassigned_company(client):
+    from fastapi.testclient import TestClient
+
+    from app.core.session import create_session_token
+    from app.main import app
+
+    company = client.post(
+        "/api/companies", json={"name": "Private Corp", "slug": "private-corp"}
+    ).json()
+    tenancy = client.post(
+        "/api/tenancies",
+        json={"company_id": company["id"], "name": "Secret", "slug": "secret"},
+    ).json()
+    token = create_session_token(
+        provider="test", subject="outsider", email="outsider@example.test", name="Outsider"
+    )
+    outsider = TestClient(app, headers={"X-Observa-Api-Key": token})
+
+    assert company["id"] not in {row["id"] for row in outsider.get("/api/companies").json()}
+    denied = outsider.get(
+        "/api/health",
+        headers={
+            "X-Observa-Company-ID": company["id"],
+            "X-Observa-Tenancy-ID": tenancy["id"],
+        },
+    )
+    assert denied.status_code == 403
+
+    client.put(
+        f"/api/companies/{company['id']}/members",
+        json={"subject": "test:outsider", "email": "outsider@example.test", "role": "viewer"},
+    )
+    allowed = outsider.get(
+        "/api/health",
+        headers={
+            "X-Observa-Company-ID": company["id"],
+            "X-Observa-Tenancy-ID": tenancy["id"],
+        },
+    )
+    assert allowed.status_code == 200
+    denied_write = outsider.post(
+        "/api/connections",
+        headers={
+            "X-Observa-Company-ID": company["id"],
+            "X-Observa-Tenancy-ID": tenancy["id"],
+        },
+        json={"name": "Must not be created", "connector_id": "mock-demo"},
+    )
+    assert denied_write.status_code == 403
+
+
 def test_connectors_catalog_has_mock_demo(client):
     r = client.get("/api/connectors")
     assert r.status_code == 200
@@ -283,3 +373,44 @@ def test_budget_monitor_syncs_cost_connectors_before_evaluation(client):
     body = response.json()
     assert any(item["status"] == "ok" for item in body["synced"])
     assert "evaluation" in body
+
+
+def test_log_analysis_requires_approval_and_defaults_to_dry_run(client):
+    ingested = client.post(
+        "/api/logs/ingest",
+        json={
+            "connection_id": "test-agent",
+            "logs": [
+                {
+                    "ts": "2026-09-23T10:00:00Z",
+                    "severity": "ERROR",
+                    "source": "app",
+                    "product": "observa",
+                    "service": "api",
+                    "message": "upstream timeout calling billing",
+                },
+                {
+                    "ts": "2026-09-23T10:01:00Z",
+                    "severity": "ERROR",
+                    "source": "app",
+                    "product": "observa",
+                    "service": "api",
+                    "message": "upstream timeout calling billing",
+                },
+            ],
+        },
+    )
+    assert ingested.status_code == 200
+    assert ingested.json()["count"] == 2
+
+    analyzed = client.post("/api/remediations/analyze", json={"dry_run": True})
+    assert analyzed.status_code == 200
+    proposal = next(
+        row for row in analyzed.json()["proposals"] if "observa/api" in row["title"]
+    )
+    assert proposal["status"] == "suggested"
+    assert "upstream timeout calling billing" not in str(proposal)
+
+    approved = client.post(f"/api/remediations/{proposal['id']}/approve")
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "simulated"

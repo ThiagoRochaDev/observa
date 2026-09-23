@@ -150,14 +150,33 @@ def test_full_login_flow_against_mocked_idp(client):
     assert location.startswith("http://localhost:3000/auth/callback#token=")
     token = location.split("#token=")[1]
 
-    # 3) The session token works exactly where the shared API key used to —
-    #    same header, same gated routes.
+    # 3) Authentication alone does not reveal tenant data. A platform admin
+    #    must explicitly grant company membership before the session can read it.
+    r = anon.get("/api/health", headers={"X-Observa-Api-Key": token})
+    assert r.status_code == 403
+
+    granted = client.put(
+        "/api/companies/cmp_default/members",
+        json={
+            "subject": "mock:user-42",
+            "email": "dev@example.test",
+            "role": "owner",
+        },
+    )
+    assert granted.status_code == 200
+
     r = anon.get("/api/health", headers={"X-Observa-Api-Key": token})
     assert r.status_code == 200
 
     r = anon.get("/api/auth/me", headers={"X-Observa-Api-Key": token})
     assert r.status_code == 200
-    assert r.json() == {"mode": "oidc", "provider": "mock", "email": "dev@example.test", "name": "Dev Example"}
+    assert r.json() == {
+        "mode": "oidc",
+        "subject": "mock:user-42",
+        "provider": "mock",
+        "email": "dev@example.test",
+        "name": "Dev Example",
+    }
 
 
 def test_callback_rejects_forged_state(client):

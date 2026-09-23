@@ -89,6 +89,36 @@ body {
   margin-top: 0.15rem;
 }
 
+.tenant-switcher {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  margin: 0 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.tenant-switcher label {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tenant-switcher select {
+  width: 100%;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--sidebar-bg);
+  color: var(--text);
+  padding: 0.4rem 0.45rem;
+  font-size: 0.75rem;
+}
+
 .dash-nav-section {
   display: block;
   font-size: 0.65rem;
@@ -265,6 +295,7 @@ body {
   }
 
   .dash-nav-section,
+  .tenant-switcher,
   .dash-sidebar-foot,
   .dash-nav-desc {
     display: none;

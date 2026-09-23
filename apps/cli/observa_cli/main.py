@@ -11,17 +11,24 @@ from typing import Any
 
 
 class Client:
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: str, company_id: str = "", tenancy_id: str = ""):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.company_id = company_id
+        self.tenancy_id = tenancy_id
 
     def request(self, method: str, path: str, body: dict | None = None) -> Any:
         data = json.dumps(body).encode() if body is not None else None
+        headers = {"Content-Type": "application/json", "X-Observa-Api-Key": self.api_key}
+        if self.company_id:
+            headers["X-Observa-Company-ID"] = self.company_id
+        if self.tenancy_id:
+            headers["X-Observa-Tenancy-ID"] = self.tenancy_id
         request = urllib.request.Request(
             f"{self.base_url}{path}",
             data=data,
             method=method,
-            headers={"Content-Type": "application/json", "X-Observa-Api-Key": self.api_key},
+            headers=headers,
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -35,8 +42,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="observa", description="Observa FinOps governance CLI")
     parser.add_argument("--url", default=os.getenv("OBSERVA_URL", "http://localhost:8080"))
     parser.add_argument("--api-key", default=os.getenv("OBSERVA_API_KEY", ""))
+    parser.add_argument("--company-id", default=os.getenv("OBSERVA_COMPANY_ID", ""))
+    parser.add_argument("--tenancy-id", default=os.getenv("OBSERVA_TENANCY_ID", ""))
     parser.add_argument("--json", action="store_true", help="Print raw JSON")
     commands = parser.add_subparsers(dest="command", required=True)
+
+    companies = commands.add_parser("companies")
+    companies_sub = companies.add_subparsers(dest="operation", required=True)
+    companies_sub.add_parser("list")
+    company_create = companies_sub.add_parser("create")
+    company_create.add_argument("name")
+    company_create.add_argument("--slug")
+
+    tenancies = commands.add_parser("tenancies")
+    tenancies_sub = tenancies.add_subparsers(dest="operation", required=True)
+    tenancy_list = tenancies_sub.add_parser("list")
+    tenancy_list.add_argument("--company")
+    tenancy_create = tenancies_sub.add_parser("create")
+    tenancy_create.add_argument("name")
+    tenancy_create.add_argument("--company", required=True)
+    tenancy_create.add_argument("--slug")
+
+    members = commands.add_parser("members")
+    members.add_argument("--company", required=True)
+    members.add_argument("--add", metavar="OIDC_SUBJECT")
+    members.add_argument("--email")
+    members.add_argument("--role", default="viewer", choices=["owner", "admin", "operator", "viewer"])
 
     resources = commands.add_parser("resources")
     resources.add_argument("--untagged", action="store_true")
@@ -96,8 +127,22 @@ def build_parser() -> argparse.ArgumentParser:
     budget_delete = budgets_sub.add_parser("delete")
     budget_delete.add_argument("rule_id")
 
+    remediations = commands.add_parser("remediations")
+    remediation_sub = remediations.add_subparsers(dest="operation", required=True)
+    remediation_sub.add_parser("list")
+    remediation_analyze = remediation_sub.add_parser("analyze")
+    remediation_analyze.add_argument("--executor")
+    remediation_analyze.add_argument("--apply", action="store_true")
+    remediation_approve = remediation_sub.add_parser("approve")
+    remediation_approve.add_argument("proposal_id")
+    remediation_reject = remediation_sub.add_parser("reject")
+    remediation_reject.add_argument("proposal_id")
+    remediation_reject.add_argument("--reason", default="Rejected from CLI")
+
     run = commands.add_parser("run-due")
     run.add_argument("--at", help="ISO-8601 timestamp used for deterministic evaluation")
+    run_all = commands.add_parser("run-all-tenancies")
+    run_all.add_argument("--at", help="ISO-8601 timestamp used for deterministic evaluation")
     return parser
 
 
@@ -105,7 +150,7 @@ def main() -> None:
     args = build_parser().parse_args()
     if not args.api_key:
         raise SystemExit("Set OBSERVA_API_KEY or pass --api-key")
-    client = Client(args.url, args.api_key)
+    client = Client(args.url, args.api_key, args.company_id, args.tenancy_id)
     try:
         result = dispatch(client, args)
         print_result(result, raw=args.json)
@@ -115,6 +160,27 @@ def main() -> None:
 
 
 def dispatch(client: Client, args: argparse.Namespace) -> Any:
+    if args.command == "companies" and args.operation == "list":
+        return client.request("GET", "/api/companies")
+    if args.command == "companies" and args.operation == "create":
+        return client.request("POST", "/api/companies", {"name": args.name, "slug": args.slug})
+    if args.command == "tenancies" and args.operation == "list":
+        query = f"?company_id={urllib.parse.quote(args.company)}" if args.company else ""
+        return client.request("GET", f"/api/tenancies{query}")
+    if args.command == "tenancies" and args.operation == "create":
+        return client.request(
+            "POST",
+            "/api/tenancies",
+            {"company_id": args.company, "name": args.name, "slug": args.slug},
+        )
+    if args.command == "members":
+        if args.add:
+            return client.request(
+                "PUT",
+                f"/api/companies/{args.company}/members",
+                {"subject": args.add, "email": args.email, "role": args.role},
+            )
+        return client.request("GET", f"/api/companies/{args.company}/members")
     if args.command == "resources":
         query = urllib.parse.urlencode(
             {key: value for key, value in {"untagged": args.untagged, "product": args.product}.items() if value}
@@ -189,8 +255,26 @@ def dispatch(client: Client, args: argparse.Namespace) -> Any:
         return client.request("GET", f"/api/budgets/events{query}")
     if args.command == "budgets" and args.operation == "delete":
         return client.request("DELETE", f"/api/budgets/{args.rule_id}")
+    if args.command == "remediations" and args.operation == "list":
+        return client.request("GET", "/api/remediations")
+    if args.command == "remediations" and args.operation == "analyze":
+        return client.request(
+            "POST",
+            "/api/remediations/analyze",
+            {"executor_connection_id": args.executor, "dry_run": not args.apply},
+        )
+    if args.command == "remediations" and args.operation == "approve":
+        return client.request("POST", f"/api/remediations/{args.proposal_id}/approve", {})
+    if args.command == "remediations" and args.operation == "reject":
+        return client.request(
+            "POST",
+            f"/api/remediations/{args.proposal_id}/reject",
+            {"reason": args.reason},
+        )
     if args.command == "run-due":
         return client.request("POST", "/api/automation/run-due", {"at": args.at})
+    if args.command == "run-all-tenancies":
+        return client.request("POST", "/api/platform/run-all", {"at": args.at})
     raise ValueError("Unsupported command")
 
 

@@ -1,20 +1,122 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
+from contextvars import ContextVar, Token
 from datetime import datetime
 from typing import Any, Iterator
 
 from app.core.config import get_settings
 from app.core.crypto import decrypt_json, encrypt_json
 
-_lock = threading.Lock()
+DEFAULT_COMPANY_ID = "cmp_default"
+DEFAULT_TENANCY_ID = "tnt_default"
+
+_lock = threading.RLock()
+_current_tenancy_id: ContextVar[str] = ContextVar(
+    "observa_tenancy_id", default=DEFAULT_TENANCY_ID
+)
+
+
+def current_tenancy_id() -> str:
+    return _current_tenancy_id.get()
+
+
+def set_current_tenancy(tenancy_id: str) -> Token:
+    return _current_tenancy_id.set(tenancy_id)
+
+
+def reset_current_tenancy(token: Token) -> None:
+    _current_tenancy_id.reset(token)
+
+
+@contextmanager
+def tenancy_context(tenancy_id: str) -> Iterator[None]:
+    token = set_current_tenancy(tenancy_id)
+    try:
+        yield
+    finally:
+        reset_current_tenancy(token)
+
+
+def _control_connect() -> sqlite3.Connection:
+    path = get_settings().data_dir / "observa_control.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init_control_db() -> None:
+    now = datetime.utcnow().isoformat()
+    conn = _control_connect()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS companies (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              slug TEXT NOT NULL UNIQUE,
+              enabled INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS tenancies (
+              id TEXT PRIMARY KEY,
+              company_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              slug TEXT NOT NULL,
+              enabled INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE(company_id, slug),
+              FOREIGN KEY(company_id) REFERENCES companies(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS company_members (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              company_id TEXT NOT NULL,
+              subject TEXT NOT NULL,
+              email TEXT,
+              role TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              UNIQUE(company_id, subject),
+              FOREIGN KEY(company_id) REFERENCES companies(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tenancies_company ON tenancies(company_id);
+            CREATE INDEX IF NOT EXISTS idx_company_members_subject ON company_members(subject);
+            """
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO companies(id, name, slug, enabled, created_at, updated_at)
+               VALUES (?, ?, ?, 1, ?, ?)""",
+            (DEFAULT_COMPANY_ID, "TGR Technology", "tgr-technology", now, now),
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO tenancies(id, company_id, name, slug, enabled, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 1, ?, ?)""",
+            (DEFAULT_TENANCY_ID, DEFAULT_COMPANY_ID, "Default", "default", now, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _tenant_db_path(tenancy_id: str):
+    settings = get_settings()
+    if tenancy_id == DEFAULT_TENANCY_ID:
+        return settings.db_path
+    return settings.data_dir / "tenancies" / f"{tenancy_id}.db"
 
 
 def _connect() -> sqlite3.Connection:
-    path = get_settings().db_path
+    path = _tenant_db_path(current_tenancy_id())
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -23,6 +125,7 @@ def _connect() -> sqlite3.Connection:
 
 def init_db() -> None:
     with _lock:
+        _init_control_db()
         conn = _connect()
         try:
             conn.executescript(
@@ -86,6 +189,43 @@ def init_db() -> None:
                   resource_id TEXT,
                   product TEXT,
                   labels_json TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS log_events (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  connection_id TEXT NOT NULL,
+                  ts TEXT NOT NULL,
+                  severity TEXT NOT NULL,
+                  source TEXT NOT NULL,
+                  message TEXT NOT NULL,
+                  product TEXT,
+                  service TEXT,
+                  trace_id TEXT,
+                  labels_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS remediation_proposals (
+                  id TEXT PRIMARY KEY,
+                  fingerprint TEXT NOT NULL UNIQUE,
+                  title TEXT NOT NULL,
+                  diagnosis TEXT NOT NULL,
+                  recommendation TEXT NOT NULL,
+                  action_json TEXT NOT NULL,
+                  evidence_count INTEGER NOT NULL,
+                  executor_connection_id TEXT,
+                  status TEXT NOT NULL,
+                  dry_run INTEGER NOT NULL DEFAULT 1,
+                  result_message TEXT,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS remediation_feedback (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  proposal_id TEXT NOT NULL,
+                  outcome TEXT NOT NULL,
+                  notes TEXT,
+                  created_at TEXT NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS alerts (
@@ -178,6 +318,9 @@ def init_db() -> None:
                 CREATE INDEX IF NOT EXISTS idx_cost_product ON cost_records(product);
                 CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(name);
                 CREATE INDEX IF NOT EXISTS idx_metrics_product ON metrics(product);
+                CREATE INDEX IF NOT EXISTS idx_logs_ts ON log_events(ts);
+                CREATE INDEX IF NOT EXISTS idx_logs_product ON log_events(product);
+                CREATE INDEX IF NOT EXISTS idx_remediations_status ON remediation_proposals(status);
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_identity
                   ON resources(connection_id, provider, resource_key);
                 CREATE INDEX IF NOT EXISTS idx_actions_status ON action_runs(status);
@@ -237,12 +380,226 @@ def db() -> Iterator[sqlite3.Connection]:
             conn.close()
 
 
+def _slug(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    if not normalized:
+        raise ValueError("Name must contain at least one letter or number")
+    return normalized
+
+
+def _company_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "slug": row["slug"],
+        "enabled": bool(row["enabled"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _tenancy_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "company_id": row["company_id"],
+        "name": row["name"],
+        "slug": row["slug"],
+        "enabled": bool(row["enabled"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def list_companies() -> list[dict]:
+    _init_control_db()
+    conn = _control_connect()
+    try:
+        rows = conn.execute("SELECT * FROM companies ORDER BY name").fetchall()
+        return [_company_dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_company(company_id: str) -> dict | None:
+    _init_control_db()
+    conn = _control_connect()
+    try:
+        row = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
+        return _company_dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def create_company(
+    name: str,
+    slug: str | None = None,
+    *,
+    owner_subject: str | None = None,
+    owner_email: str | None = None,
+) -> dict:
+    _init_control_db()
+    company_id = f"cmp_{uuid.uuid4().hex[:16]}"
+    company_slug = _slug(slug or name)
+    now = datetime.utcnow().isoformat()
+    conn = _control_connect()
+    try:
+        conn.execute(
+            """INSERT INTO companies(id, name, slug, enabled, created_at, updated_at)
+               VALUES (?, ?, ?, 1, ?, ?)""",
+            (company_id, name.strip(), company_slug, now, now),
+        )
+        if owner_subject:
+            conn.execute(
+                """INSERT INTO company_members(company_id, subject, email, role, created_at)
+                   VALUES (?, ?, ?, 'owner', ?)""",
+                (company_id, owner_subject, owner_email, now),
+            )
+        conn.commit()
+        row = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
+        return _company_dict(row)
+    except sqlite3.IntegrityError as exc:
+        raise ValueError(f"Company slug already exists: {company_slug}") from exc
+    finally:
+        conn.close()
+
+
+def list_companies_for_subject(subject: str) -> list[dict]:
+    _init_control_db()
+    conn = _control_connect()
+    try:
+        rows = conn.execute(
+            """SELECT c.* FROM companies c
+               JOIN company_members m ON m.company_id = c.id
+               WHERE m.subject = ? ORDER BY c.name""",
+            (subject,),
+        ).fetchall()
+        return [_company_dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_company_member(company_id: str, subject: str) -> dict | None:
+    _init_control_db()
+    conn = _control_connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM company_members WHERE company_id = ? AND subject = ?",
+            (company_id, subject),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def list_company_members(company_id: str) -> list[dict]:
+    _init_control_db()
+    conn = _control_connect()
+    try:
+        rows = conn.execute(
+            "SELECT company_id, subject, email, role, created_at FROM company_members "
+            "WHERE company_id = ? ORDER BY created_at",
+            (company_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def add_company_member(company_id: str, subject: str, email: str | None, role: str) -> dict:
+    if role not in {"owner", "admin", "operator", "viewer"}:
+        raise ValueError("Role must be owner, admin, operator or viewer")
+    if not get_company(company_id):
+        raise ValueError("Company not found")
+    now = datetime.utcnow().isoformat()
+    conn = _control_connect()
+    try:
+        conn.execute(
+            """INSERT INTO company_members(company_id, subject, email, role, created_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(company_id, subject) DO UPDATE SET
+                 email = excluded.email, role = excluded.role""",
+            (company_id, subject, email, role, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT company_id, subject, email, role, created_at FROM company_members "
+            "WHERE company_id = ? AND subject = ?",
+            (company_id, subject),
+        ).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def list_tenancies(company_id: str | None = None) -> list[dict]:
+    _init_control_db()
+    conn = _control_connect()
+    try:
+        if company_id:
+            rows = conn.execute(
+                "SELECT * FROM tenancies WHERE company_id = ? ORDER BY name", (company_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM tenancies ORDER BY company_id, name").fetchall()
+        return [_tenancy_dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_tenancy(tenancy_id: str) -> dict | None:
+    _init_control_db()
+    conn = _control_connect()
+    try:
+        row = conn.execute("SELECT * FROM tenancies WHERE id = ?", (tenancy_id,)).fetchone()
+        return _tenancy_dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def create_tenancy(company_id: str, name: str, slug: str | None = None) -> dict:
+    company = get_company(company_id)
+    if not company or not company["enabled"]:
+        raise ValueError("Company not found or disabled")
+    tenancy_id = f"tnt_{uuid.uuid4().hex[:16]}"
+    tenancy_slug = _slug(slug or name)
+    now = datetime.utcnow().isoformat()
+    conn = _control_connect()
+    try:
+        conn.execute(
+            """INSERT INTO tenancies(id, company_id, name, slug, enabled, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 1, ?, ?)""",
+            (tenancy_id, company_id, name.strip(), tenancy_slug, now, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM tenancies WHERE id = ?", (tenancy_id,)).fetchone()
+    except sqlite3.IntegrityError as exc:
+        raise ValueError(f"Tenancy slug already exists in this company: {tenancy_slug}") from exc
+    finally:
+        conn.close()
+    with tenancy_context(tenancy_id):
+        init_db()
+    return _tenancy_dict(row)
+
+
+def tenancy_context_info() -> dict:
+    tenancy = get_tenancy(current_tenancy_id())
+    if not tenancy:
+        raise ValueError("Tenancy not found")
+    company = get_company(tenancy["company_id"])
+    return {"company": company, "tenancy": tenancy}
+
+
 def get_setting(key: str) -> Any:
     with db() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if not row:
             return None
         return json.loads(row["value"])
+
+
+def get_global_setting(key: str) -> Any:
+    with tenancy_context(DEFAULT_TENANCY_ID):
+        return get_setting(key)
 
 
 def set_setting(key: str, value: Any) -> None:
@@ -252,6 +609,11 @@ def set_setting(key: str, value: Any) -> None:
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, json.dumps(value)),
         )
+
+
+def set_global_setting(key: str, value: Any) -> None:
+    with tenancy_context(DEFAULT_TENANCY_ID):
+        set_setting(key, value)
 
 
 def list_connections() -> list[dict]:
@@ -348,6 +710,7 @@ def delete_connection(conn_id: str) -> bool:
         cur = conn.execute("DELETE FROM connections WHERE id = ?", (conn_id,))
         conn.execute("DELETE FROM cost_records WHERE connection_id = ?", (conn_id,))
         conn.execute("DELETE FROM resources WHERE connection_id = ?", (conn_id,))
+        conn.execute("DELETE FROM log_events WHERE connection_id = ?", (conn_id,))
         return cur.rowcount > 0
 
 
@@ -452,6 +815,212 @@ def replace_metrics(connection_id: str, rows: list[dict]) -> None:
                 for r in rows
             ],
         )
+
+
+def replace_logs(connection_id: str, rows: list[dict]) -> None:
+    with db() as conn:
+        conn.execute("DELETE FROM log_events WHERE connection_id = ?", (connection_id,))
+        conn.executemany(
+            """INSERT INTO log_events(
+                 connection_id, ts, severity, source, message, product, service, trace_id, labels_json
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    connection_id,
+                    row["ts"],
+                    row.get("severity") or "INFO",
+                    row.get("source") or "unknown",
+                    row["message"],
+                    row.get("product"),
+                    row.get("service"),
+                    row.get("trace_id"),
+                    json.dumps(row.get("labels") or {}),
+                )
+                for row in rows
+            ],
+        )
+
+
+def append_logs(connection_id: str, rows: list[dict]) -> int:
+    with db() as conn:
+        conn.executemany(
+            """INSERT INTO log_events(
+                 connection_id, ts, severity, source, message, product, service, trace_id, labels_json
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    connection_id,
+                    row["ts"],
+                    row.get("severity") or "INFO",
+                    row.get("source") or "api",
+                    row["message"],
+                    row.get("product"),
+                    row.get("service"),
+                    row.get("trace_id"),
+                    json.dumps(row.get("labels") or {}),
+                )
+                for row in rows
+            ],
+        )
+    return len(rows)
+
+
+def list_logs(
+    *,
+    limit: int = 100,
+    product: str | None = None,
+    severity: str | None = None,
+    source: str | None = None,
+    query: str | None = None,
+) -> list[dict]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    for column, value in (("product", product), ("severity", severity), ("source", source)):
+        if value:
+            clauses.append(f"{column} = ?")
+            params.append(value)
+    if query:
+        clauses.append("(message LIKE ? OR product LIKE ? OR service LIKE ?)")
+        value = f"%{query}%"
+        params.extend([value, value, value])
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(max(1, min(limit, 1000)))
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM log_events {where} ORDER BY ts DESC LIMIT ?", params
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "ts": row["ts"],
+            "severity": row["severity"],
+            "source": row["source"],
+            "message": row["message"],
+            "product": row["product"],
+            "service": row["service"],
+            "trace_id": row["trace_id"],
+            "labels": json.loads(row["labels_json"] or "{}"),
+        }
+        for row in rows
+    ]
+
+
+def upsert_remediation_proposal(proposal: dict) -> dict:
+    now = datetime.utcnow().isoformat() + "Z"
+    proposal_id = proposal.get("id") or f"rem_{uuid.uuid4().hex[:16]}"
+    with db() as conn:
+        conn.execute(
+            """INSERT INTO remediation_proposals(
+                 id, fingerprint, title, diagnosis, recommendation, action_json, evidence_count,
+                 executor_connection_id, status, dry_run, result_message, created_at, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'suggested', ?, NULL, ?, ?)
+               ON CONFLICT(fingerprint) DO UPDATE SET
+                 evidence_count = excluded.evidence_count,
+                 diagnosis = excluded.diagnosis,
+                 recommendation = excluded.recommendation,
+                 action_json = excluded.action_json,
+                 updated_at = excluded.updated_at""",
+            (
+                proposal_id,
+                proposal["fingerprint"],
+                proposal["title"],
+                proposal["diagnosis"],
+                proposal["recommendation"],
+                json.dumps(proposal.get("action") or {}),
+                proposal["evidence_count"],
+                proposal.get("executor_connection_id"),
+                1 if proposal.get("dry_run", True) else 0,
+                now,
+                now,
+            ),
+        )
+        row = conn.execute(
+            "SELECT * FROM remediation_proposals WHERE fingerprint = ?",
+            (proposal["fingerprint"],),
+        ).fetchone()
+    return _remediation_dict(row)
+
+
+def list_remediation_proposals(status: str | None = None) -> list[dict]:
+    with db() as conn:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM remediation_proposals WHERE status = ? ORDER BY updated_at DESC",
+                (status,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM remediation_proposals ORDER BY updated_at DESC"
+            ).fetchall()
+    return [_remediation_dict(row) for row in rows]
+
+
+def get_remediation_proposal(proposal_id: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM remediation_proposals WHERE id = ?", (proposal_id,)
+        ).fetchone()
+    return _remediation_dict(row) if row else None
+
+
+def get_remediation_by_fingerprint(fingerprint: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM remediation_proposals WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+    return _remediation_dict(row) if row else None
+
+
+def latest_remediation_feedback(proposal_id: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT proposal_id, outcome, notes, created_at FROM remediation_feedback "
+            "WHERE proposal_id = ? ORDER BY id DESC LIMIT 1",
+            (proposal_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_remediation_proposal(
+    proposal_id: str, *, status: str, result_message: str | None = None
+) -> dict | None:
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "UPDATE remediation_proposals SET status = ?, result_message = ?, updated_at = ? "
+            "WHERE id = ?",
+            (status, result_message, now, proposal_id),
+        )
+    return get_remediation_proposal(proposal_id)
+
+
+def add_remediation_feedback(proposal_id: str, outcome: str, notes: str | None = None) -> dict:
+    now = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO remediation_feedback(proposal_id, outcome, notes, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (proposal_id, outcome, notes, now),
+        )
+    return {"proposal_id": proposal_id, "outcome": outcome, "notes": notes, "created_at": now}
+
+
+def _remediation_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "fingerprint": row["fingerprint"],
+        "title": row["title"],
+        "diagnosis": row["diagnosis"],
+        "recommendation": row["recommendation"],
+        "action": json.loads(row["action_json"] or "{}"),
+        "evidence_count": row["evidence_count"],
+        "executor_connection_id": row["executor_connection_id"],
+        "status": row["status"],
+        "dry_run": bool(row["dry_run"]),
+        "result_message": row["result_message"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
 
 
 def replace_alerts(rows: list[dict]) -> None:

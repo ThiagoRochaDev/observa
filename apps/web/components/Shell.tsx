@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { api, getCompanyId, getTenancyId, setTenantContext, type Company, type Tenancy } from '@/lib/api'
 
 const ICON_STROKE = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.75 } as const
 
@@ -95,6 +96,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M12 10v4M12 17.2v.1" />
     </svg>
   ),
+  remediations: (
+    <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
+      <path d="m14.5 6.5 3-3 3 3-3 3M13 8l-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11" />
+      <path d="M4 5h6M7 2v6" />
+    </svg>
+  ),
   connections: (
     <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
       <path d="M9 15 15 9M8.5 8.5l-2 2a3.5 3.5 0 0 0 5 5l2-2M15.5 15.5l2-2a3.5 3.5 0 0 0-5-5l-2 2" />
@@ -104,6 +111,11 @@ const ICONS: Record<string, ReactNode> = {
     <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
       <rect x="5" y="11" width="14" height="9" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  ),
+  organizations: (
+    <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
+      <path d="M4 21V7l8-4 8 4v14M8 21v-4h8v4M8 9h1M12 9h1M16 9h1M8 13h1M12 13h1M16 13h1" />
     </svg>
   ),
 }
@@ -131,11 +143,13 @@ const GROUPS = [
       { href: '/rum', label: 'RUM & Synthetics', description: 'Real users & uptime', icon: 'rum' },
       { href: '/gcp', label: 'GCP Monitoring', description: 'Metrics & logging', icon: 'gcp' },
       { href: '/alerts', label: 'Alerts', description: 'Open incidents', icon: 'alerts' },
+      { href: '/remediations', label: 'Remediations', description: 'Diagnose & approve fixes', icon: 'remediations' },
     ],
   },
   {
     title: 'Platform',
     links: [
+      { href: '/settings/organizations', label: 'Organizations', description: 'Companies & tenancies', icon: 'organizations' },
       { href: '/connections', label: 'Connections', description: 'Connectors & credentials', icon: 'connections' },
       { href: '/settings/auth', label: 'Authentication', description: 'SSO & access', icon: 'auth' },
     ],
@@ -144,6 +158,43 @@ const GROUPS = [
 
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [tenancies, setTenancies] = useState<Tenancy[]>([])
+  const [companyId, setCompanyId] = useState('')
+  const [tenancyId, setTenancyId] = useState('')
+
+  useEffect(() => {
+    Promise.all([api.companies(), api.tenancies()]).then(([companyRows, tenancyRows]) => {
+      const selectedCompany = companyRows.some((row) => row.id === getCompanyId())
+        ? getCompanyId()
+        : companyRows[0]?.id || ''
+      const companyTenancies = tenancyRows.filter((row) => row.company_id === selectedCompany)
+      const selectedTenancy = companyTenancies.some((row) => row.id === getTenancyId())
+        ? getTenancyId()
+        : companyTenancies[0]?.id || ''
+      setCompanies(companyRows)
+      setTenancies(tenancyRows)
+      setCompanyId(selectedCompany)
+      setTenancyId(selectedTenancy)
+      if (selectedCompany && selectedTenancy) setTenantContext(selectedCompany, selectedTenancy)
+    }).catch(() => undefined)
+  }, [])
+
+  function selectCompany(nextCompanyId: string) {
+    const firstTenancy = tenancies.find((row) => row.company_id === nextCompanyId)
+    setCompanyId(nextCompanyId)
+    setTenancyId(firstTenancy?.id || '')
+    if (firstTenancy) {
+      setTenantContext(nextCompanyId, firstTenancy.id)
+      window.location.reload()
+    }
+  }
+
+  function selectTenancy(nextTenancyId: string) {
+    setTenancyId(nextTenancyId)
+    setTenantContext(companyId, nextTenancyId)
+    window.location.reload()
+  }
 
   return (
     <div className="dash-layout">
@@ -155,6 +206,23 @@ export function Shell({ children }: { children: ReactNode }) {
             <div className="dash-brand-sub">connect · catalog · observe</div>
           </div>
         </Link>
+
+        <div className="tenant-switcher">
+          <label>
+            Company
+            <select value={companyId} onChange={(event) => selectCompany(event.target.value)}>
+              {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Tenancy
+            <select value={tenancyId} onChange={(event) => selectTenancy(event.target.value)}>
+              {tenancies.filter((row) => row.company_id === companyId).map((tenancy) => (
+                <option key={tenancy.id} value={tenancy.id}>{tenancy.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <nav className="dash-nav" aria-label="Main navigation">
           {GROUPS.map((g) => (

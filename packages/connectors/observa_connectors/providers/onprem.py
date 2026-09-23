@@ -4,8 +4,10 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from observa_connectors.base import (
+    ActionResult,
     BaseConnector,
     CostSignal,
+    LogSignal,
     MetricSignal,
     PullResult,
     ResourceSignal,
@@ -229,7 +231,7 @@ class OnPremAgentConnector(BaseConnector):
     id = "onprem-custom"
     name = "Custom / On-premise (HTTP)"
     description = "Poll any internal HTTP endpoint that returns cost/resource/metric JSON."
-    capabilities = ["cost", "inventory", "metrics"]
+    capabilities = ["cost", "inventory", "metrics", "logs", "remediation"]
     category = "on_prem"
     icon = "onprem"
     docs_url = ""
@@ -243,6 +245,10 @@ class OnPremAgentConnector(BaseConnector):
                     "type": "string",
                     "title": "Label shown in dashboards",
                     "default": "on-prem",
+                },
+                "remediation_url": {
+                    "type": "string",
+                    "title": "Approved remediation webhook URL (optional)",
                 },
             },
             "required": ["endpoint_url"],
@@ -317,4 +323,43 @@ class OnPremAgentConnector(BaseConnector):
             )
             for m in body.get("metrics", [])
         ]
-        return PullResult(costs=costs, resources=resources, metrics=metrics)
+        logs = [
+            LogSignal(
+                ts=datetime.fromisoformat(str(item["ts"]).replace("Z", "+00:00")),
+                severity=str(item.get("severity", "INFO")).upper(),
+                source=str(item.get("source", label)),
+                message=str(item.get("message", "")),
+                product=item.get("product"),
+                service=item.get("service"),
+                trace_id=item.get("trace_id"),
+                labels=item.get("labels", {}) or {},
+            )
+            for item in body.get("logs", [])
+            if item.get("ts") and item.get("message")
+        ]
+        return PullResult(costs=costs, resources=resources, metrics=metrics, logs=logs)
+
+    def apply_remediation(
+        self,
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        proposal: dict[str, Any],
+        dry_run: bool = True,
+    ) -> ActionResult:
+        if dry_run:
+            return ActionResult(ok=True, message="Remediation simulated; webhook was not called.")
+        endpoint = config.get("remediation_url")
+        if not endpoint:
+            raise NotImplementedError("Configure remediation_url before enabling automatic fixes")
+        status, body = request_json(
+            "POST", endpoint, headers=self._headers(secrets), json_body={"proposal": proposal}
+        )
+        if status >= 400:
+            return ActionResult(ok=False, message=f"Remediation webhook returned HTTP {status}")
+        external_id = body.get("id") if isinstance(body, dict) else None
+        return ActionResult(
+            ok=True,
+            message=f"Approved remediation dispatched (HTTP {status}).",
+            external_id=str(external_id) if external_id else None,
+        )

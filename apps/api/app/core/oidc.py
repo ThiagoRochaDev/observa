@@ -38,7 +38,7 @@ def client_secret_of(provider_cfg: dict) -> str | None:
 
 
 def get_provider_config(provider: str) -> dict[str, Any]:
-    auth = db.get_setting("auth") or {}
+    auth = db.get_global_setting("auth") or {}
     cfg = (auth.get("providers") or {}).get(provider)
     if not cfg or not cfg.get("enabled"):
         raise OidcError(f"Provider '{provider}' is not configured or not enabled.")

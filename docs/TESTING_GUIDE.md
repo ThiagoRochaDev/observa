@@ -1092,3 +1092,808 @@ Rotas protegidas pela API key ou sessão:
 
 O Swagger em `http://localhost:8080/docs` permite executar todas as rotas protegidas após usar o
 header `X-Observa-Api-Key` nas requisições.
+
+## 23. Cenários completos das novas features de budget
+
+Esta seção deve ser executada depois do smoke test, com o `mock-demo` sincronizado. Cada cenário
+possui um identificador para registrar evidências em uma planilha, issue ou ferramenta de QA.
+
+### 23.1 Preparação comum
+
+```powershell
+cd "C:\Users\thiag\Downloads\PROJECTS_TGR_TECHNOLOGY\observa"
+$baseUrl = "http://localhost:8080"
+$apiKey = (Get-Content .\data\api_key -Raw).Trim()
+$headers = @{ "X-Observa-Api-Key" = $apiKey }
+Invoke-RestMethod "$baseUrl/api/demo/seed" -Method Post -Headers $headers
+$resources = Invoke-RestMethod "$baseUrl/api/resources" -Headers $headers
+$hiperlocalResource = $resources | Where-Object product -eq "hiperlocal" | Select-Object -First 1
+$hiperlocal = Invoke-RestMethod "$baseUrl/api/products/hiperlocal" -Headers $headers
+```
+
+Se estiver usando Docker, preencha `$apiKey` manualmente com a chave exibida nos logs.
+
+Função auxiliar:
+
+```powershell
+function New-ObservaBudget {
+  param(
+    [string]$Name,
+    [string]$ScopeType,
+    [string]$ScopeValue,
+    [double]$Amount,
+    [string]$ResponseMode = "notify",
+    [string]$Owner = "",
+    [int[]]$ResourceIds = @(),
+    [int]$WindowDays = 30,
+    [double]$Warning = 0.8,
+    [double]$Critical = 1.0,
+    [bool]$DryRun = $true
+  )
+
+  $body = @{
+    name = $Name
+    scope_type = $ScopeType
+    scope_value = $ScopeValue
+    amount = $Amount
+    currency = "BRL"
+    window_days = $WindowDays
+    warning_threshold = $Warning
+    critical_threshold = $Critical
+    response_mode = $ResponseMode
+    owner = $(if ($Owner) { $Owner } else { $null })
+    resource_ids = $ResourceIds
+    dry_run = $DryRun
+    enabled = $true
+  } | ConvertTo-Json -Depth 6
+
+  Invoke-RestMethod "$baseUrl/api/budgets" `
+    -Method Post -Headers $headers -ContentType "application/json" -Body $body
+}
+```
+
+### 23.2 Matriz resumida
+
+| ID | Cenário | Resultado principal |
+|---|---|---|
+| BUD-001 | Valores padrão | Janela 30 dias e thresholds 80/100% |
+| BUD-002 | Abaixo do limite | Nível `normal`, sem evento |
+| BUD-003 | Forecast preventivo | Warning antes do teto |
+| BUD-004 | Limite crítico | Evento `critical` |
+| BUD-005 | Escopo produto | Custos filtrados por produto |
+| BUD-006 | Escopo provider/cloud | Custos filtrados por provider |
+| BUD-007 | Escopo conta/projeto | Custos filtrados por account |
+| BUD-008 | Escopo recurso | Custos filtrados por resource ID |
+| BUD-009 | Monitor completo | Sync antes da avaliação |
+| BUD-010 | Falha parcial de sync | Outras conexões continuam |
+| BUD-011 | Resposta notify | Alerta sem ação |
+| BUD-012 | Resposta approval | Ação preventiva pendente |
+| BUD-013 | Resposta ignore | Evento ignorado sem alerta/ação |
+| BUD-014 | Owner obrigatório | Criação rejeitada sem owner |
+| BUD-015 | Recurso não mapeado | Evento `needs_mapping` |
+| BUD-016 | Aprovação dry-run | Ação termina `simulated` |
+| BUD-017 | Rejeição | Ação termina `rejected` |
+| BUD-018 | Deduplicação diária | Sem evento duplicado |
+| BUD-019 | Warning evolui para critical | Novo evento, mesma ação pendente |
+| BUD-020 | Regra desabilitada | Regra não avaliada |
+| BUD-021 | Atualização e exclusão | CRUD persistente |
+| BUD-022 | Janela customizada | Forecast muda conforme dias |
+| BUD-023 | Interface web | Criação, monitoramento e histórico |
+| BUD-024 | CLI | Mesmas operações da API |
+| BUD-025 | Mobile | Aprovação e rejeição remotas |
+| BUD-026 | Alertas | Budget aparece na central |
+| BUD-027 | Auditoria | Regra, evento e decisão registrados |
+| BUD-028 | Segurança | API key, validações e dry-run |
+| BUD-029 | Scheduler | Monitoramento recorrente |
+| BUD-030 | AWS real controlada | Stop somente após aprovação |
+| BUD-031 | GCP/Azure | Detecta custo e sinaliza falta de adapter |
+
+### BUD-001 — Validar valores padrão
+
+```powershell
+$rule = New-ObservaBudget -Name "Defaults" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 999999
+$rule | ConvertTo-Json -Depth 5
+```
+
+Esperado:
+
+- `window_days=30`.
+- `warning_threshold=0.8`.
+- `critical_threshold=1.0`.
+- `currency=BRL`.
+- `dry_run=true`.
+- `enabled=true`.
+
+### BUD-002 — Custo abaixo do limite
+
+```powershell
+$rule = New-ObservaBudget -Name "Normal" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 999999
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+$result.rules | Where-Object rule_id -eq $rule.id
+```
+
+Esperado: nível `normal`, `usage_pct` menor que `0.8` e nenhum evento novo para a regra.
+
+### BUD-003 — Forecast aciona proteção preventiva
+
+Use o custo atual para posicionar o consumo em aproximadamente 90%:
+
+```powershell
+$amount = $hiperlocal.total_brl / 0.9
+$rule = New-ObservaBudget -Name "Forecast preventivo" -ScopeType product `
+  -ScopeValue hiperlocal -Amount $amount -ResponseMode approval `
+  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-21"}'
+$event = $result.created | Where-Object rule_id -eq $rule.id
+$event
+```
+
+Esperado:
+
+- Nível `warning`.
+- Status `pending_approval`.
+- Uma ação `stop` criada antes de 100%.
+- `projected_cost` considerado junto com `actual_cost`.
+
+### BUD-004 — Ultrapassar limite crítico
+
+```powershell
+$rule = New-ObservaBudget -Name "Critical" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 1
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-22"}'
+$result.created | Where-Object rule_id -eq $rule.id
+```
+
+Esperado: nível `critical`, `usage_pct >= 1` e alerta de severidade alta.
+
+### BUD-005 — Budget por produto
+
+```powershell
+$rule = New-ObservaBudget -Name "Produto hiperlocal" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 5000
+Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+```
+
+Compare `actual_cost` com `total_brl` retornado por `/api/products/hiperlocal`. Pequenas diferenças
+só são aceitáveis se as janelas consultadas forem diferentes.
+
+### BUD-006 — Budget por cloud/provider
+
+```powershell
+$summary = Invoke-RestMethod "$baseUrl/api/costs/summary?days=30" -Headers $headers
+$rule = New-ObservaBudget -Name "Cloud GCP" -ScopeType provider `
+  -ScopeValue gcp -Amount ($summary.by_provider.gcp / 0.9)
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+$result.rules | Where-Object rule_id -eq $rule.id
+```
+
+Esperado: custo calculado apenas para registros cujo provider é `gcp`.
+
+### BUD-007 — Budget por conta ou projeto cloud
+
+No demo, `account=demo-org`:
+
+```powershell
+$rule = New-ObservaBudget -Name "Conta demo" -ScopeType account `
+  -ScopeValue demo-org -Amount 100
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+$result.rules | Where-Object rule_id -eq $rule.id
+```
+
+Repita com `scope_type=project`. Ambos usam o campo normalizado `account` nos custos. Em GCP real,
+use o project ID exportado no billing; em Azure, use a subscription normalizada pelo conector.
+
+### BUD-008 — Budget por recurso
+
+O conector precisa produzir `cost_records.resource_id`. Crie a regra usando o identificador cloud,
+não apenas o UID interno:
+
+```powershell
+$resource = $resources | Select-Object -First 1
+$rule = New-ObservaBudget -Name "Recurso individual" -ScopeType resource `
+  -ScopeValue $resource.id -Amount 100
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+$result.rules | Where-Object rule_id -eq $rule.id
+```
+
+Esperado no demo atual: custo zero quando não existe alocação de billing por recurso. Isso deve ser
+tratado como lacuna de dados, não como prova de custo zero. Em um conector real com resource IDs,
+compare o valor com o relatório nativo da cloud.
+
+### BUD-009 — Monitor sincroniza antes de avaliar
+
+```powershell
+$result = Invoke-RestMethod "$baseUrl/api/budgets/monitor" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+$result.synced
+$result.failed
+$result.evaluation
+```
+
+Esperado:
+
+- `synced` contém conexões habilitadas com capacidade `cost`.
+- A avaliação ocorre depois das sincronizações.
+- O resultado inclui regras e eventos novos.
+
+### BUD-010 — Falha parcial de sincronização
+
+1. Crie uma conexão real com credencial propositalmente inválida em ambiente de teste.
+2. Mantenha o Mock Demo habilitado.
+3. Execute `/api/budgets/monitor`.
+
+Esperado:
+
+- A conexão inválida aparece em `failed`.
+- O Mock Demo aparece em `synced`.
+- A avaliação ainda é executada com os dados disponíveis.
+- O monitor não encerra todo o ciclo por falha de um único provider.
+
+### BUD-011 — Modo notify
+
+```powershell
+$rule = New-ObservaBudget -Name "Somente notificar" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 1 -ResponseMode notify
+Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-23"}'
+```
+
+Esperado: evento `notified`, alerta criado e nenhuma action ID.
+
+### BUD-012 — Modo approval
+
+```powershell
+$rule = New-ObservaBudget -Name "Aprovação preventiva" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 1 -ResponseMode approval `
+  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-24"}'
+$event = $result.created | Where-Object rule_id -eq $rule.id
+```
+
+Esperado: evento `pending_approval` e action ID visível em Governance, CLI e mobile.
+
+### BUD-013 — Modo ignore
+
+```powershell
+$rule = New-ObservaBudget -Name "Exceção aprovada" -ScopeType provider `
+  -ScopeValue gcp -Amount 1 -ResponseMode ignore
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-25"}'
+$event = $result.created | Where-Object rule_id -eq $rule.id
+```
+
+Esperado: status `ignored`, sem action IDs e sem alerta novo, mas com evento histórico.
+
+### BUD-014 — Owner obrigatório para aprovação
+
+```powershell
+try {
+  New-ObservaBudget -Name "Sem owner" -ScopeType product `
+    -ScopeValue hiperlocal -Amount 100 -ResponseMode approval
+} catch {
+  $_.Exception.Response.StatusCode.value__
+}
+```
+
+Esperado: HTTP `400` com mensagem informando que `owner` é obrigatório.
+
+### BUD-015 — Custo sem recursos mapeados
+
+O demo possui custo Datadog, mas não inventário Datadog elegível para stop:
+
+```powershell
+$rule = New-ObservaBudget -Name "Datadog sem mapping" -ScopeType provider `
+  -ScopeValue datadog -Amount 1 -ResponseMode approval -Owner "finops"
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-26"}'
+$result.created | Where-Object rule_id -eq $rule.id
+```
+
+Esperado: status `needs_mapping`, sem desligamento e alerta indicando necessidade de mapear recursos.
+
+### BUD-016 — Aprovar em dry-run
+
+```powershell
+$rule = New-ObservaBudget -Name "Aprovação dry-run" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 1 -ResponseMode approval `
+  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-28"}'
+$event = $result.created | Where-Object rule_id -eq $rule.id
+$actionId = $event.action_ids[0]
+$approved = Invoke-RestMethod "$baseUrl/api/automation/actions/$actionId/approve" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+$approved
+```
+
+Esperado: status `simulated`; o status real do recurso não deve mudar.
+
+### BUD-017 — Rejeitar desligamento
+
+```powershell
+$rule = New-ObservaBudget -Name "Rejeição justificada" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 1 -ResponseMode approval `
+  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" `
+  -Body '{"at":"2026-09-29"}'
+$event = $result.created | Where-Object rule_id -eq $rule.id
+$actionId = $event.action_ids[0]
+$rejectBody = @{ reason = "Campanha ativa; exceção aprovada pelo owner" } | ConvertTo-Json
+Invoke-RestMethod "$baseUrl/api/automation/actions/$actionId/reject" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body $rejectBody
+```
+
+Esperado: status `rejected`, justificativa persistida e nenhuma ação no provider.
+
+### BUD-018 — Deduplicação no mesmo dia
+
+```powershell
+$body = '{"at":"2026-09-27"}'
+$first = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body $body
+$second = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body $body
+```
+
+Esperado: a segunda execução retorna a regra como `deduplicated=true` e não cria outro evento para
+a mesma combinação de regra, data e nível.
+
+### BUD-019 — Evolução warning para critical
+
+1. Crie uma regra cujo consumo fique entre warning e critical.
+2. Avalie usando uma data fixa.
+3. Reduza `amount` com `PATCH /api/budgets/{rule_id}`.
+4. Avalie novamente na mesma data.
+
+```powershell
+$patch = @{ amount = 1 } | ConvertTo-Json
+Invoke-RestMethod "$baseUrl/api/budgets/$($rule.id)" `
+  -Method Patch -Headers $headers -ContentType "application/json" -Body $patch
+```
+
+Esperado:
+
+- Um evento warning e outro critical, pois os níveis são diferentes.
+- A ação pendente existente é reutilizada.
+- Não há spam de aprovações para o mesmo recurso.
+
+### BUD-020 — Regra desabilitada
+
+```powershell
+$patch = @{ enabled = $false } | ConvertTo-Json
+Invoke-RestMethod "$baseUrl/api/budgets/$($rule.id)" `
+  -Method Patch -Headers $headers -ContentType "application/json" -Body $patch
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+```
+
+Esperado: o ID da regra desabilitada não aparece em `result.rules`.
+
+### BUD-021 — Atualizar e excluir
+
+```powershell
+$patch = @{ amount = 7000; owner = "novo-owner" } | ConvertTo-Json
+$updated = Invoke-RestMethod "$baseUrl/api/budgets/$($rule.id)" `
+  -Method Patch -Headers $headers -ContentType "application/json" -Body $patch
+Invoke-RestMethod "$baseUrl/api/budgets/$($rule.id)" `
+  -Method Delete -Headers $headers
+```
+
+Esperado: valores atualizados persistem; após DELETE, a regra não aparece em `GET /api/budgets`.
+
+### BUD-022 — Janela de 7 dias versus 30 dias
+
+Crie duas regras idênticas, alterando apenas `window_days`:
+
+```powershell
+$seven = New-ObservaBudget -Name "Janela 7d" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 5000 -WindowDays 7
+$thirty = New-ObservaBudget -Name "Janela 30d" -ScopeType product `
+  -ScopeValue hiperlocal -Amount 5000 -WindowDays 30
+$result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
+  -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
+```
+
+Esperado: `actual_cost`, `observed_days` e forecast refletem suas respectivas janelas.
+
+### BUD-023 — Interface web
+
+1. Abra `/budgets`.
+2. Crie regras para produto, projeto, recurso e provider.
+3. Confira validação de owner para aprovação.
+4. Clique em **Sincronizar e avaliar**.
+5. Confira custo real, projetado, percentual, nível e status.
+6. Abra `/alerts` e confirme alertas de budget.
+7. Abra `/governance` e confirme aprovações pendentes.
+8. Exclua uma regra e confirme remoção da lista.
+
+### BUD-024 — CLI
+
+```powershell
+observa budgets create "CLI provider" --scope provider --value gcp `
+  --amount 5000 --warning 80 --critical 100 --response notify
+observa budgets list
+observa budgets monitor
+observa budgets events
+observa --json budgets events
+```
+
+Para aprovação:
+
+```powershell
+observa budgets create "CLI approval" --scope product --value hiperlocal `
+  --amount 100 --response approval --owner squad-hiperlocal `
+  --resource $($hiperlocalResource.uid)
+observa budgets monitor
+observa actions list --status pending_approval
+```
+
+### BUD-025 — Aplicativo mobile
+
+1. Gere uma ação de budget pendente.
+2. Abra o app e atualize com pull-to-refresh.
+3. Confira aumento do contador de alertas.
+4. Confira a ação com motivo iniciado por `Budget`.
+5. Aprove uma ação dry-run e confirme que ela desaparece dos pendentes.
+6. Gere outra ação e rejeite com o app.
+7. Confirme os estados na API.
+
+### BUD-026 — Central de alertas
+
+```powershell
+$alerts = Invoke-RestMethod "$baseUrl/api/alerts" -Headers $headers
+$alerts | Where-Object category -eq "budget"
+```
+
+Esperado:
+
+- Warning usa severidade `medium`.
+- Critical usa severidade `high`.
+- Approval pendente usa status `pending`.
+- Modo ignore não cria alerta.
+
+### BUD-027 — Auditoria no banco
+
+```powershell
+@'
+import json
+import sqlite3
+
+conn = sqlite3.connect("data/observa.db")
+conn.row_factory = sqlite3.Row
+rows = conn.execute(
+    "SELECT * FROM audit_events WHERE event_type LIKE 'budget.%' ORDER BY id DESC LIMIT 20"
+).fetchall()
+for row in rows:
+    print(row["created_at"], row["event_type"], row["subject"], json.loads(row["payload_json"]))
+'@ | python -
+```
+
+Esperado: eventos para criação/alteração de regras e criação de budget events.
+
+### BUD-028 — Segurança e validações
+
+Valide individualmente:
+
+- Requisição sem API key retorna 401.
+- `amount <= 0` retorna 422 ou 400.
+- `window_days=0` retorna 422.
+- `warning_threshold > critical_threshold` retorna 400.
+- `scope_type` desconhecido retorna 400.
+- `response_mode` desconhecido retorna 400.
+- Approval sem owner retorna 400.
+- Regra nova permanece em dry-run por padrão.
+- Resource UID inexistente não executa ação.
+
+### BUD-029 — Scheduler recorrente
+
+Configure o scheduler para chamar `/api/budgets/monitor`, não apenas `/api/budgets/evaluate`:
+
+```cron
+*/5 * * * * curl -sS -X POST http://observa-api:8080/api/budgets/monitor \
+  -H "X-Observa-Api-Key: SUA_CHAVE" -H "Content-Type: application/json" -d '{}'
+```
+
+Teste por pelo menos três ciclos:
+
+1. Primeiro ciclo sincroniza e cria evento.
+2. Segundo ciclo deduplica.
+3. Após alterar o custo/threshold, o terceiro ciclo cria o novo nível quando aplicável.
+
+Registre duração, quantidade de conexões sincronizadas e falhas parciais.
+
+### BUD-030 — AWS EC2 real em conta sandbox
+
+Pré-condições:
+
+- Instância descartável.
+- Janela de mudança autorizada.
+- Backup ou recriação conhecida.
+- Credencial limitada ao ARN da instância.
+
+Fluxo:
+
+1. Crie conexão AWS e sincronize.
+2. Confirme EC2 no Inventory.
+3. Crie budget approval com UID da instância.
+4. Mantenha `dry_run=true` e aprove a primeira ação.
+5. Confirme status `simulated` e instância ainda ligada.
+6. Somente após validação, crie outra regra via CLI com `--apply`.
+7. Gere e aprove a ação.
+8. Confirme no console AWS que a instância parou.
+9. Confirme status `executed` e auditoria.
+
+Nunca faça esse cenário diretamente em produção.
+
+### BUD-031 — GCP e Azure sem adapter de desligamento
+
+1. Configure GCP Billing ou Azure Cost Management.
+2. Sincronize custos.
+3. Crie budget por project/account/provider.
+4. Avalie e confirme custo/forecast.
+5. Use response `approval` sem resource IDs mapeados.
+
+Esperado: detecção e alerta funcionam; evento fica `needs_mapping` ou a ação falha de forma segura
+se o conector não suporta power action. O Observa não deve desconectar billing automaticamente.
+
+### 23.3 Evidências recomendadas
+
+Para cada ID, salve:
+
+- Data e hora.
+- Ambiente e commit testado.
+- Payload enviado.
+- Resposta HTTP.
+- Screenshot da Web ou mobile quando aplicável.
+- Estado anterior e posterior do recurso.
+- Registro em `budget_events`, `action_runs`, `alerts` e `audit_events`.
+- Resultado `Pass`, `Fail` ou `Blocked` com justificativa.
+
+### 23.4 Limpeza dos cenários
+
+Liste e remova apenas as regras criadas para testes:
+
+```powershell
+$rules = Invoke-RestMethod "$baseUrl/api/budgets" -Headers $headers
+$rules | Select-Object id,name,scope_type,scope_value
+
+# Exemplo individual:
+Invoke-RestMethod "$baseUrl/api/budgets/ID_DA_REGRA" `
+  -Method Delete -Headers $headers
+```
+
+Os eventos e a auditoria devem ser preservados como evidência. Para apagar todo o ambiente local,
+use o procedimento de reset completo da seção 19.
+
+## 24. Companies, tenancies, privacidade e remediação
+
+### 24.1 Preparação
+
+```powershell
+$baseUrl = "http://localhost:8080"
+$apiKey = Get-Content .\data\api_key -Raw
+$admin = @{ "X-Observa-Api-Key" = $apiKey.Trim() }
+
+$company = Invoke-RestMethod "$baseUrl/api/companies" -Method Post -Headers $admin `
+  -ContentType "application/json" -Body '{"name":"Empresa QA","slug":"empresa-qa"}'
+$prod = Invoke-RestMethod "$baseUrl/api/tenancies" -Method Post -Headers $admin `
+  -ContentType "application/json" `
+  -Body (@{ company_id=$company.id; name="Produção"; slug="producao" } | ConvertTo-Json)
+$sandbox = Invoke-RestMethod "$baseUrl/api/tenancies" -Method Post -Headers $admin `
+  -ContentType "application/json" `
+  -Body (@{ company_id=$company.id; name="Sandbox"; slug="sandbox" } | ConvertTo-Json)
+$prodHeaders = $admin + @{
+  "X-Observa-Company-ID" = $company.id
+  "X-Observa-Tenancy-ID" = $prod.id
+}
+$sandboxHeaders = $admin + @{
+  "X-Observa-Company-ID" = $company.id
+  "X-Observa-Tenancy-ID" = $sandbox.id
+}
+```
+
+### MT-001 — Company com múltiplas tenancies
+
+```powershell
+Invoke-RestMethod "$baseUrl/api/companies" -Headers $admin
+Invoke-RestMethod "$baseUrl/api/tenancies?company_id=$($company.id)" -Headers $admin
+```
+
+Esperado: a company aparece uma vez e contém as tenancies Produção e Sandbox com IDs diferentes.
+
+### MT-002 — Isolamento de conexões
+
+```powershell
+Invoke-RestMethod "$baseUrl/api/connections" -Method Post -Headers $prodHeaders `
+  -ContentType "application/json" `
+  -Body '{"name":"Mock Prod","connector_id":"mock-demo","config":{"days":7}}'
+$prodConnections = Invoke-RestMethod "$baseUrl/api/connections" -Headers $prodHeaders
+$sandboxConnections = Invoke-RestMethod "$baseUrl/api/connections" -Headers $sandboxHeaders
+```
+
+Esperado: `Mock Prod` existe somente em `$prodConnections`; Sandbox permanece vazia.
+
+### MT-003 — Isolamento de custos, recursos e budgets
+
+Sincronize a conexão na Produção e consulte os mesmos endpoints nas duas tenancies:
+
+```powershell
+$connectionId = $prodConnections[0].id
+Invoke-RestMethod "$baseUrl/api/connections/$connectionId/sync" -Method Post -Headers $prodHeaders
+Invoke-RestMethod "$baseUrl/api/costs/summary" -Headers $prodHeaders
+Invoke-RestMethod "$baseUrl/api/costs/summary" -Headers $sandboxHeaders
+Invoke-RestMethod "$baseUrl/api/resources" -Headers $sandboxHeaders
+Invoke-RestMethod "$baseUrl/api/budgets" -Headers $sandboxHeaders
+```
+
+Esperado: dados sincronizados somente em Produção; nenhuma linha vaza para Sandbox.
+
+### MT-004 — Company e tenancy incompatíveis
+
+Envie o ID da tenancy com o ID de outra company.
+
+Esperado: HTTP `409` e nenhum dado no corpo da resposta.
+
+### MT-005 — Tenancy inexistente
+
+```powershell
+$invalid = $admin + @{ "X-Observa-Tenancy-ID" = "tnt_inexistente" }
+try { Invoke-RestMethod "$baseUrl/api/resources" -Headers $invalid } catch { $_.Exception.Response.StatusCode.value__ }
+```
+
+Esperado: HTTP `404` sem fallback silencioso para a tenancy padrão.
+
+### MT-006 — OIDC sem membership não descobre company
+
+1. Autentique um usuário OIDC ainda não cadastrado.
+2. Execute `GET /api/companies` com o token de sessão.
+3. Tente acessar a tenancy informando os headers manualmente.
+
+Esperado: a company não aparece na listagem e o acesso direto retorna HTTP `403`.
+
+### MT-007 — Membership explícita
+
+Com a chave de plataforma ou um owner, autorize o `subject` exibido por `/api/auth/me`:
+
+```powershell
+$body = @{
+  subject = "google:SUBJECT_IMUTAVEL"
+  email = "owner@empresa.example"
+  role = "owner"
+} | ConvertTo-Json
+Invoke-RestMethod "$baseUrl/api/companies/$($company.id)/members" `
+  -Method Put -Headers $admin -ContentType "application/json" -Body $body
+```
+
+Esperado: após novo acesso, o usuário lista apenas companies autorizadas e acessa suas tenancies.
+
+### MT-008 — Viewer é somente leitura
+
+Cadastre outro subject com role `viewer`. Com o token desse usuário:
+
+- `GET /api/costs/summary` deve retornar `200`.
+- `POST /api/connections` deve retornar `403`.
+- `POST /api/budgets/evaluate` deve retornar `403`.
+- `POST /api/remediations/{id}/approve` deve retornar `403`.
+
+### MT-009 — Operator não aprova remediação
+
+O role `operator` pode ingerir logs e executar análise, mas a aprovação/rejeição de uma correção
+deve retornar HTTP `403`. Repita como `owner` ou `admin` e confirme HTTP `200`.
+
+### MT-010 — Seletor Web
+
+1. Abra **Platform → Organizations**.
+2. Crie uma company e duas tenancies.
+3. Use o seletor lateral para alternar entre elas.
+4. Crie uma conexão somente em uma tenancy.
+
+Esperado: cada tela recarrega no contexto selecionado e a conexão não aparece na outra tenancy.
+
+### MT-011 — CLI com contexto
+
+```powershell
+$env:OBSERVA_URL = $baseUrl
+$env:OBSERVA_API_KEY = $apiKey.Trim()
+observa companies list
+observa tenancies list --company $company.id
+observa --company-id $company.id --tenancy-id $prod.id resources
+```
+
+Esperado: os comandos de dados usam exclusivamente a tenancy informada.
+
+### MT-012 — Mobile com contexto
+
+1. Informe API URL, API key, Company ID e Tenancy ID na tela de conexão.
+2. Confira o contexto no topo do app.
+3. Valide custos, aprovações e remediações sugeridas.
+
+Esperado: o app envia os dois headers em toda requisição e não mistura ambientes.
+
+### REM-001 — Ingestão privada de logs
+
+```powershell
+$logs = @{
+  connection_id = "qa-agent"
+  logs = @(
+    @{ ts="2026-09-23T10:00:00Z"; severity="ERROR"; source="app"; product="observa"; service="api"; message="upstream timeout calling billing" },
+    @{ ts="2026-09-23T10:01:00Z"; severity="ERROR"; source="app"; product="observa"; service="api"; message="upstream timeout calling billing" }
+  )
+} | ConvertTo-Json -Depth 5
+Invoke-RestMethod "$baseUrl/api/logs/ingest" -Method Post -Headers $prodHeaders `
+  -ContentType "application/json" -Body $logs
+```
+
+Esperado: duas linhas em Produção e zero linhas em Sandbox.
+
+### REM-002 — Análise local e sugestão
+
+```powershell
+$analysis = Invoke-RestMethod "$baseUrl/api/remediations/analyze" -Method Post `
+  -Headers $prodHeaders -ContentType "application/json" -Body '{"dry_run":true}'
+$proposal = $analysis.proposals | Where-Object title -Like '*observa/api*' | Select-Object -First 1
+$proposal
+```
+
+Esperado: status `suggested`, diagnóstico e recomendação, sem credenciais ou logs brutos no payload.
+
+### REM-003 — Aprovação dry-run
+
+```powershell
+Invoke-RestMethod "$baseUrl/api/remediations/$($proposal.id)/approve" `
+  -Method Post -Headers $prodHeaders -ContentType "application/json" -Body '{}'
+```
+
+Esperado: status `simulated`; nenhum webhook, pipeline ou aplicação é alterado.
+
+### REM-004 — Rejeição e aprendizado
+
+Rejeite uma nova proposta e envie feedback `false_positive`. Execute a análise novamente.
+
+Esperado: o mesmo fingerprint deixa de ser sugerido naquela tenancy, mas continua independente nas
+outras tenancies.
+
+### REM-005 — Correção real aprovada
+
+1. Configure uma conexão `onprem-custom` com `remediation_url` em ambiente sandbox.
+2. Analise com `dry_run=false` e `executor_connection_id` dessa conexão.
+3. Confirme que nada acontece antes da aprovação.
+4. Aprove como owner/admin.
+
+Esperado: o endpoint privado recebe somente ID, título, diagnóstico, recomendação e ação estruturada;
+não recebe log bruto, token ou secrets. O resultado fica `applied` ou `failed` e gera auditoria.
+
+### SEC-001 — Busca por segredos e dados de cliente no repositório
+
+```powershell
+git grep -n -I -E "(BEGIN PRIVATE KEY|client_secret.{0,10}=|api[_-]?key.{0,10}=|bearer [A-Za-z0-9_-]{20,})"
+git status --short
+```
+
+Esperado: nenhum segredo real, banco `.db`, diretório `data/`, `.env` ou credencial versionada.
+
+### SEC-002 — Tentativa de enumeração
+
+Com token sem membership, tente IDs válidos e inválidos em `/api/context`, `/api/resources`,
+`/api/logs`, `/api/remediations` e `/api/connections`.
+
+Esperado: `403` para company não autorizada, `404` para tenancy inexistente e nenhum metadado do
+cliente na resposta.
