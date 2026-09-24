@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from html import escape
 from pathlib import Path
 
@@ -9,7 +11,7 @@ from playwright.sync_api import Page, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 FRAMES = ROOT / "docs" / "demo" / "frames"
-BASE_URL = os.getenv("OBSERVA_DEMO_URL", "http://127.0.0.1:3000")
+BASE_URL = os.getenv("OBSERVA_DEMO_URL", "http://localhost:3000")
 EDGE = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
 
 
@@ -42,22 +44,26 @@ def capture_page(page: Page, filename: str, path: str) -> None:
 
 
 def cli_frame(page: Page) -> None:
-    output = """> observa companies list
-ID            NAME          SLUG
-cmp_example   Example Corp  example-corp
-
-> observa --company-id cmp_example --tenancy-id tnt_prod resources --product storefront
-ID                         NAME               PROVIDER  TYPE            STATUS
-run/storefront-worker      storefront-worker  gcp       cloud_run       running
-sql/storefront-primary     storefront-db      gcp       cloudsql        running
-redis/storefront-cache     storefront-cache   aws       elasticache     running
-k8s/storefront/catalog     catalog-api         onprem    deployment      running
-
-> observa --company-id cmp_example --tenancy-id tnt_prod remediations list
-ID            STATUS     OPERATION
-rem_demo_01   simulated  inspect_connection_pool
-rem_demo_02   suggested  open_fix_workflow
-rem_demo_03   suggested  investigate_dependency_timeout"""
+    environment = os.environ.copy()
+    environment["OBSERVA_URL"] = os.getenv("OBSERVA_API_URL", "http://127.0.0.1:8080")
+    environment["OBSERVA_API_KEY"] = os.environ["OBSERVA_DEMO_API_KEY"]
+    commands = [
+        (["companies", "list"], "observa companies list"),
+        (["resources", "--untagged"], "observa resources --untagged"),
+        (["budgets", "list"], "observa budgets list"),
+    ]
+    chunks: list[str] = []
+    for arguments, label in commands:
+        result = subprocess.run(
+            [sys.executable, "-m", "observa_cli.main", *arguments],
+            cwd=ROOT / "apps" / "cli",
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        chunks.append(f"> {label}\n{result.stdout.strip()}")
+    output = "\n\n".join(chunks)
     page.set_content(
         f"""<!doctype html><html><head><meta charset="utf-8"><style>
         body {{ margin:0; background:#080b10; color:#d7e2ef; font:20px Consolas,monospace; padding:48px }}
@@ -114,28 +120,68 @@ def main() -> None:
         page.evaluate("key => localStorage.setItem('observa_api_key', key)", api_key)
         page.evaluate("localStorage.setItem('observa_company_id', 'cmp_default')")
         page.evaluate("localStorage.setItem('observa_tenancy_id', 'tnt_default')")
-        capture_page(page, "010-overview.png", "/")
-        capture_page(page, "020-products.png", "/products")
-        capture_page(page, "030-inventory.png", "/inventory")
-        capture_page(page, "040-budgets.png", "/budgets")
-        capture_page(page, "050-governance.png", "/governance")
-        capture_page(page, "060-connections.png", "/connections")
-        capture_page(page, "070-logs.png", "/logs")
-        capture_page(page, "080-remediations.png", "/remediations")
-        capture_page(page, "090-organizations.png", "/settings/organizations")
+        routes = [
+            ("010-overview.png", "/"),
+            ("020-products.png", "/products"),
+            ("030-inventory.png", "/inventory"),
+            ("040-budgets.png", "/budgets"),
+            ("050-governance.png", "/governance"),
+            ("060-connections.png", "/connections"),
+            ("070-alerts.png", "/alerts"),
+            ("080-dashboards.png", "/dashboards"),
+            ("090-observability.png", "/observability"),
+            ("100-logs.png", "/logs"),
+            ("110-traces.png", "/traces"),
+            ("120-monitors.png", "/monitors"),
+            ("130-rum.png", "/rum"),
+            ("140-gcp.png", "/gcp"),
+            ("150-maps.png", "/maps"),
+            ("160-remediations.png", "/remediations"),
+            ("170-auth.png", "/settings/auth"),
+            ("180-organizations.png", "/settings/organizations"),
+        ]
+        for filename, path in routes:
+            capture_page(page, filename, path)
+
+        page.goto(f"{BASE_URL}/", wait_until="networkidle")
+        search = page.get_by_placeholder("Qual serviço você deseja acessar?")
+        search.fill("conexões")
+        page.wait_for_timeout(500)
+        page.screenshot(path=FRAMES / "015-global-search.png")
+
+        page.goto(f"{BASE_URL}/connections", wait_until="networkidle")
+        page.get_by_placeholder("Buscar conectores…").fill("GitHub")
+        page.wait_for_timeout(500)
+        page.get_by_text("GitHub", exact=True).first.click()
+        page.wait_for_timeout(500)
+        page.screenshot(path=FRAMES / "065-github-connector.png")
+
+        page.goto(f"{BASE_URL}/dashboards", wait_until="networkidle")
+        dashboard = page.locator("a[href^='/dashboards/']").first
+        dashboard_href = dashboard.get_attribute("href")
+        if dashboard_href:
+            capture_page(page, "085-dashboard-detail.png", dashboard_href)
+
+        page.goto(f"{BASE_URL}/products", wait_until="networkidle")
+        product = page.locator("a[href^='/products/']").first
+        product_href = product.get_attribute("href")
+        if product_href:
+            capture_page(page, "025-product-detail.png", product_href)
 
         title_frame(
             page,
-            "100-automation.png",
+            "190-automation.png",
             "Segurança por padrão",
             "Aprovar antes de agir",
             "Dry-run, trilha de auditoria, papéis por tenancy e isolamento físico de dados entre empresas.",
         )
         cli_frame(page)
+        (FRAMES / "110-cli.png").rename(FRAMES / "200-cli.png")
         mobile_frame(page)
+        (FRAMES / "120-mobile.png").rename(FRAMES / "210-mobile.png")
         title_frame(
             page,
-            "130-finish.png",
+            "220-finish.png",
             "Execução portátil",
             "Cloud, Kubernetes, VM ou local",
             "Conectores extensíveis para nuvem, on-premises, GitLab, observabilidade e qualquer ferramenta da empresa.",
