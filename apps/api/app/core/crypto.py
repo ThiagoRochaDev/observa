@@ -17,7 +17,10 @@ def _restrict(path) -> None:
 
 
 def _fernet() -> Fernet:
-    path = get_settings().key_file
+    settings = get_settings()
+    if settings.observa_secrets_key:
+        return Fernet(settings.observa_secrets_key.encode("utf-8"))
+    path = settings.key_file
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_bytes(Fernet.generate_key())

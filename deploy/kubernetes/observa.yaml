@@ -14,6 +14,32 @@ spec:
     requests:
       storage: 10Gi
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: observa-backups
+  namespace: observa
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: observa-config
+  namespace: observa
+data:
+  ENVIRONMENT: production
+  DATA_DIR: /data
+  SEED_DEMO_DATA: "false"
+  ENABLE_API_DOCS: "false"
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_REQUESTS: "240"
+  AUTH_RATE_LIMIT_REQUESTS: "30"
+  CORS_ORIGINS: "[]"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,12 +47,15 @@ metadata:
   namespace: observa
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels: { app: observa-api }
   template:
     metadata:
       labels: { app: observa-api }
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -35,16 +64,27 @@ spec:
         - name: api
           image: observa-api:local
           imagePullPolicy: IfNotPresent
-          env:
-            - name: DATA_DIR
-              value: /data
+          envFrom:
+            - configMapRef:
+                name: observa-config
+            - secretRef:
+                name: observa-secrets
           ports:
             - name: http
               containerPort: 8080
           readinessProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
           livenessProbe:
             httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           resources:
             requests: { cpu: 100m, memory: 128Mi }
             limits: { cpu: "1", memory: 1Gi }
@@ -68,19 +108,30 @@ spec:
       port: 8080
       targetPort: http
 ---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: observa-api
+  namespace: observa
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels: { app: observa-api }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: observa-web
   namespace: observa
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels: { app: observa-web }
   template:
     metadata:
       labels: { app: observa-web }
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -93,6 +144,11 @@ spec:
               containerPort: 3000
           readinessProbe:
             httpGet: { path: /, port: http }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           resources:
             requests: { cpu: 100m, memory: 128Mi }
             limits: { cpu: "1", memory: 512Mi }
@@ -108,3 +164,86 @@ spec:
     - name: http
       port: 3000
       targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: observa-web
+  namespace: observa
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: observa-web }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: observa-web
+  namespace: observa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: observa-web
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: observa-backup
+  namespace: observa
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+            - name: backup
+              image: observa-api:local
+              imagePullPolicy: IfNotPresent
+              args:
+                - python
+                - /observa/scripts/backup.py
+                - --data-dir
+                - /data
+                - --output-dir
+                - /backups
+                - --retention
+                - "14"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: observa-data
+            - name: backups
+              persistentVolumeClaim:
+                claimName: observa-backups

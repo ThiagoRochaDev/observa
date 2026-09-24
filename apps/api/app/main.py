@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import get_settings
-from app.core.db import init_db
+from app.core.config import get_settings, validate_production_settings
+from app.core.db import database_health, init_db
+from app.core.http_security import SecurityMiddleware
 from app.core.security import get_or_create_api_key
 from app.presentation.api.auth_flow_router import router as auth_flow_router
 from app.presentation.api.mcp_router import mcp_router
@@ -15,15 +16,17 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    validate_production_settings(settings)
     init_db()
-    get_or_create_api_key()  # prints the token to the log on first boot
-    try:
-        from app.application.sync_service import ensure_full_demo
+    get_or_create_api_key()
+    if settings.seed_demo_data and settings.environment.lower() != "production":
+        try:
+            from app.application.sync_service import ensure_full_demo
 
-        result = ensure_full_demo()
-        print(f"[observa] demo seed: {result}")
-    except Exception as exc:  # noqa: BLE001
-        print(f"[observa] demo seed failed: {exc}")
+            result = ensure_full_demo()
+            print(f"[observa] demo seed: {result}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[observa] demo seed failed: {exc}")
     yield
 
 
@@ -32,7 +35,12 @@ app = FastAPI(
     description="Observa — connect clouds, catalog products, cost & health",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.enable_api_docs else None,
+    redoc_url="/redoc" if settings.enable_api_docs else None,
+    openapi_url="/openapi.json" if settings.enable_api_docs else None,
 )
+
+app.add_middleware(SecurityMiddleware, settings=settings)
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,3 +74,8 @@ def healthz():
     """Unauthenticated liveness probe (Docker/orchestrator healthcheck) —
     deliberately outside /api, which requires the API key on every route."""
     return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz():
+    return {"status": "ready", "database": database_health()}

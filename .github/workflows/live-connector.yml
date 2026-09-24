@@ -1,0 +1,30 @@
+name: Live connector smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      connector:
+        description: Connector id to validate
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    environment: live-connectors
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize private connector payload
+        shell: bash
+        env:
+          PAYLOAD: ${{ secrets.OBSERVA_LIVE_CONNECTOR_PAYLOAD }}
+        run: printf '%s' "$PAYLOAD" > "$RUNNER_TEMP/connector.json"
+      - name: Test connector without persistence
+        run: >-
+          python scripts/connector_smoke.py
+          --url "${{ secrets.OBSERVA_LIVE_URL }}"
+          --api-key "${{ secrets.OBSERVA_LIVE_API_KEY }}"
+          --connector "${{ inputs.connector }}"
+          --payload "$RUNNER_TEMP/connector.json"

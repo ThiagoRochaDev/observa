@@ -35,7 +35,10 @@ def _restrict(path) -> None:
 
 
 def get_or_create_session_secret() -> str:
-    path = get_settings().session_secret_file
+    settings = get_settings()
+    if settings.observa_session_secret:
+        return settings.observa_session_secret
+    path = settings.session_secret_file
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         key = secrets.token_urlsafe(32)

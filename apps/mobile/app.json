@@ -5,7 +5,21 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "ios": { "supportsTablet": true },
-    "android": { "package": "technology.tgr.observa" }
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "technology.tgr.observa"
+    },
+    "android": {
+      "package": "technology.tgr.observa"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "SET_WITH_EAS_INIT"
+      }
+    }
   }
 }

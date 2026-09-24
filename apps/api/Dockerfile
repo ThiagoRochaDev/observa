@@ -7,6 +7,7 @@ WORKDIR /observa
 # nome de pacote, não por caminho, então a ordem importa.
 COPY packages/connectors /observa/packages/connectors
 COPY apps/api /observa/apps/api
+COPY scripts /observa/scripts
 
 RUN pip install --no-cache-dir -e "/observa/packages/connectors[all]" \
     && pip install --no-cache-dir -e "/observa/apps/api"

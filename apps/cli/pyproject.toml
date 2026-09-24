@@ -6,8 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "observa-cli"
 version = "0.1.0"
 description = "CLI for Observa FinOps governance"
+readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
+authors = [{ name = "Thiago G. Rocha / TGR Technology", email = "thiago.g.rocha@hotmail.com" }]
 
 [project.scripts]
 observa = "observa_cli.main:main"

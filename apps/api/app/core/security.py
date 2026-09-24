@@ -37,17 +37,16 @@ def _restrict(path) -> None:
 
 
 def get_or_create_api_key() -> str:
-    path = get_settings().api_key_file
+    settings = get_settings()
+    if settings.observa_api_key:
+        return settings.observa_api_key
+    path = settings.api_key_file
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         key = secrets.token_urlsafe(32)
         path.write_text(key, encoding="utf-8")
         _restrict(path)
-        print(
-            "[observa] Generated API key (required on every /api request):\n"
-            f"[observa]   {key}\n"
-            f"[observa] Persisted at {path} — also read it any time from there.",
-        )
+        print(f"[observa] Generated API key and persisted it at {path}.")
         return key
     _restrict(path)
     return path.read_text(encoding="utf-8").strip()

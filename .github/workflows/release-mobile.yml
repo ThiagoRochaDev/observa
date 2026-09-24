@@ -1,0 +1,38 @@
+name: Build and submit mobile
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        options: [all, android, ios]
+        default: all
+      submit:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  eas:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - run: npm install --global eas-cli
+      - run: eas build --non-interactive --profile production --platform "${{ inputs.platform }}"
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - if: inputs.submit
+        run: eas submit --non-interactive --profile production --platform "${{ inputs.platform }}" --latest
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

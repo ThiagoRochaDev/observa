@@ -1,0 +1,38 @@
+services:
+  api:
+    environment:
+      ENVIRONMENT: production
+      SEED_DEMO_DATA: "false"
+      ENABLE_API_DOCS: "false"
+      OBSERVA_API_KEY: ${OBSERVA_API_KEY:?required}
+      OBSERVA_SECRETS_KEY: ${OBSERVA_SECRETS_KEY:?required}
+      OBSERVA_SESSION_SECRET: ${OBSERVA_SESSION_SECRET:?required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+      RATE_LIMIT_ENABLED: "true"
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

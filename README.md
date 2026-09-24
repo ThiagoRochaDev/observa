@@ -32,6 +32,7 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
 - [Mapa Vivo and contextual assistant](docs/MAPA_VIVO.md)
 - [Web design system](docs/UI_DESIGN_SYSTEM.md)
 - [Complete testing guide](docs/TESTING_GUIDE.md)
+- [Production readiness](docs/PRODUCTION_READINESS.md)
 - [Architecture](#architecture)
 - [Principles](#principles)
 - [License](#license)
@@ -52,8 +53,9 @@ credentials, and a random **API key**, are both generated on first run and
 persisted in a Docker volume (`data/secrets.key`, `data/api_key`). The API
 key is required on every `/api` request (until OIDC login is wired, this is
 what stands between the connections you add and anyone who can reach the
-API over the network) — grab it from `docker compose logs api` on first
-boot, or `cat data/api_key`, and paste it into the web app when prompted.
+API over the network). Read it with `docker compose exec api cat /data/api_key`
+and paste it into the web app when prompted. The key is deliberately not printed
+in application logs.
 
 ## Quick start (local dev, no Docker)
 

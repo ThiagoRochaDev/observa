@@ -2205,3 +2205,57 @@ e todos os registros pertencem à company e tenancy dos headers.
 2. Envie `tools/call` para uma tool e um `Mcp-Name` diferente.
 
 Esperado: o endpoint retorna erro JSON-RPC `-32020` e não executa consulta nem ferramenta.
+# Homologação enterprise
+
+Além dos cenários funcionais deste guia, execute a seguinte sequência antes de
+promover uma versão para produção.
+
+## Segurança HTTP
+
+1. Chame `/healthz` sem autenticação e confirme HTTP 200.
+2. Chame `/readyz` sem autenticação e confirme `control=ok` e `tenant=ok`.
+3. Chame `/api/health` autenticado e confirme os headers `RateLimit-*`,
+   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` e `Cache-Control: no-store`.
+4. Reduza `RATE_LIMIT_REQUESTS`, reinicie a API e confirme HTTP 429 e `Retry-After`.
+5. Envie um payload maior que `MAX_REQUEST_BODY_BYTES` e confirme HTTP 413.
+6. Suba com `ENVIRONMENT=production` sem um dos três segredos obrigatórios e
+   confirme que a aplicação falha fechada antes de aceitar tráfego.
+
+## Backup e restore
+
+1. Crie dados em duas tenancies e execute `python scripts/backup.py --data-dir data --output-dir backups`.
+2. Confira `manifest.json`, checksums e ausência de `api_key`, `secrets.key` e `session_secret`.
+3. Pare a API e restaure em um diretório vazio com `python scripts/restore.py <backup> --data-dir data-restored`.
+4. Inicie uma instância apontando `DATA_DIR` para o diretório restaurado e use os
+   mesmos segredos externos do ambiente de origem.
+5. Confirme isolamento das tenancies, conexões, budgets, automações e auditoria.
+6. Corrompa uma cópia de um `.db` no backup e confirme que o restore recusa o checksum.
+
+## Carga e disponibilidade
+
+1. Execute `python scripts/load_test.py --api-key <token> --requests 1000 --concurrency 25`.
+2. Confirme taxa de erro abaixo de 1% e p95 abaixo do SLO do ambiente.
+3. No Kubernetes, remova um pod web e confirme continuidade pela segunda réplica.
+4. Confirme o HPA após gerar CPU suficiente e valide o PDB durante manutenção de nó.
+5. Não escale a API acima de uma réplica enquanto o backend for SQLite.
+
+## Conectores reais
+
+1. Crie credenciais temporárias de menor privilégio em uma conta de homologação.
+2. Execute o workflow manual `Live connector smoke test` com o payload guardado no
+   GitHub Environment `live-connectors`.
+3. Confirme que o workflow não imprime o payload nem a API key.
+4. Salve e sincronize o conector pela UI em uma tenancy exclusiva de homologação.
+5. Compare uma amostra de custos e inventário com o console da cloud.
+6. Revogue as credenciais temporárias após o teste.
+
+## CLI e mobile
+
+1. Rode `python -m build apps/cli`, instale o wheel em ambiente limpo e execute cada comando.
+2. Publique somente por tag `cli-vX.Y.Z` após configurar Trusted Publishing no PyPI.
+3. Rode `npm run typecheck` em `apps/mobile`.
+4. Configure o projeto EAS e gere build interno pelo workflow com `submit=false`.
+5. Teste login, troca de company/tenancy, budgets, aprovações e notificações em Android e iOS.
+6. Submeta às lojas somente após preencher política de privacidade e concluir a homologação.
+
+Veja `docs/PRODUCTION_READINESS.md` para os limites conhecidos, runbook e critérios de go-live.

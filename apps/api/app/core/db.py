@@ -366,6 +366,19 @@ def init_db() -> None:
             conn.close()
 
 
+def database_health() -> dict[str, str]:
+    _init_control_db()
+    control = _control_connect()
+    tenant = _connect()
+    try:
+        control.execute("SELECT 1").fetchone()
+        tenant.execute("SELECT 1").fetchone()
+        return {"control": "ok", "tenant": "ok"}
+    finally:
+        tenant.close()
+        control.close()
+
+
 @contextmanager
 def db() -> Iterator[sqlite3.Connection]:
     with _lock:
