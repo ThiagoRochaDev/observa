@@ -1900,6 +1900,9 @@ cliente na resposta.
 
 ## 25. Mapa Vivo e assistente contextual
 
+Arquitetura, contrato da API, controles de privacidade e troubleshooting detalhados estão em
+`docs/MAPA_VIVO.md`.
+
 ### MAP-001 — Carregamento da topologia
 
 1. Acesse `http://localhost:3000/maps`.
@@ -1955,3 +1958,70 @@ acessível e nenhum controle essencial fica cortado.
 
 Esperado: a credencial inválida é removida, o formulário de acesso reaparece e a aplicação só é
 liberada após `/api/health` validar a nova chave.
+
+### MAP-006 — Integridade do contrato da topologia
+
+```powershell
+$apiKey = (Get-Content .\data\api_key -Raw).Trim()
+$headers = @{ "X-Observa-Api-Key" = $apiKey }
+$ecosystem = Invoke-RestMethod `
+  "http://localhost:8080/api/ecosystem?product=hiperlocal" `
+  -Headers $headers
+
+$nodeIds = @($ecosystem.nodes | ForEach-Object { $_.id })
+$duplicateIds = @($nodeIds | Group-Object | Where-Object Count -gt 1)
+$invalidEdges = @($ecosystem.edges | Where-Object {
+  $_.source -notin $nodeIds -or $_.target -notin $nodeIds
+})
+
+$duplicateIds.Count
+$invalidEdges.Count
+```
+
+Esperado: os dois contadores retornam `0`; nenhum nó possui ID duplicado e nenhuma aresta aponta
+para componente inexistente.
+
+### MAP-007 — Assistente não chama serviços externos
+
+1. Abra as ferramentas de desenvolvimento do navegador na aba **Network**.
+2. Limpe as requisições registradas.
+3. Abra **Pergunte ao Observa** e envie uma pergunta.
+4. Filtre por `fetch` e `xhr`.
+
+Esperado: nenhuma chamada adicional para domínio externo ou endpoint de IA é criada; a resposta é
+calculada no navegador a partir do payload já carregado.
+
+### MAP-008 — Isolamento de company e tenancy
+
+1. Crie duas companies, cada uma com pelo menos uma tenancy.
+2. Troque o contexto ativo no seletor lateral.
+3. Em **Network**, abra a requisição de `/api/ecosystem`.
+4. Confira `X-Observa-Company-ID` e `X-Observa-Tenancy-ID`.
+5. Repita o teste com um usuário sem membership na company selecionada.
+
+Esperado: os headers correspondem ao contexto ativo; o backend rejeita contexto não autorizado e
+nunca retorna nomes, IDs ou relações pertencentes a outra organização.
+
+Observação: enquanto `/api/ecosystem` usar `demo_platform.py`, este cenário valida autenticação e
+propagação de contexto. A validação completa do filtro persistido deve ser obrigatória quando a
+topologia real dos conectores substituir o provedor demonstrativo.
+
+### MAP-009 — Modo somente leitura
+
+1. Selecione diferentes nós e dependências.
+2. Use zoom, ajuste automático e movimentação do canvas.
+3. Faça perguntas no assistente.
+4. Consulte auditoria, propostas de remediação e recursos do provider.
+
+Esperado: nenhuma tag, regra, recurso, proposal ou configuração é criada ou alterada. O mapa e o
+assistente local operam somente em leitura.
+
+### MAP-010 — Falha controlada da API
+
+1. Com a página aberta, pare temporariamente a API.
+2. Troque o produto selecionado.
+3. Observe a mensagem de erro.
+4. Reinicie a API e selecione novamente o produto.
+
+Esperado: a topologia anterior não é misturada com a nova seleção, a interface exibe erro sem
+mostrar dados de outro contexto e volta a carregar após a recuperação da API.

@@ -29,6 +29,7 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
 - [Portable deployment](docs/DEPLOYMENT.md)
 - [Privacy and isolation](docs/PRIVACY_SECURITY.md)
 - [Log diagnosis and remediation](docs/REMEDIATION.md)
+- [Mapa Vivo and contextual assistant](docs/MAPA_VIVO.md)
 - [Complete testing guide](docs/TESTING_GUIDE.md)
 - [Architecture](#architecture)
 - [Principles](#principles)
@@ -114,7 +115,11 @@ The **business** view of your stack — not servers, but the products/teams that
 
 ![Ecosystem map](docs/screenshots/ecosystem-map.jpg)
 
-An interactive, pannable/zoomable graph (React Flow) of how a product's services actually talk to each other — frontends, APIs, workers, databases, and external dependencies, color-coded by kind. Switch products with the pill selector at the top. Useful for onboarding, incident triage ("what does this service call?"), and spotting undocumented dependencies.
+The **Mapa Vivo** is an interactive, pannable and zoomable graph (React Flow) of how a product's services communicate — frontends, APIs, workers, cloud resources and external dependencies, color-coded by kind. Switch products with the selector at the top, click a component to highlight its direct connections, and use the inspector to navigate upstream and downstream dependencies.
+
+The **Pergunte ao Observa** panel uses the selected product and component as its context. In the current version, answers are calculated locally from the topology already loaded in the browser: no topology data is sent to an external AI provider and no infrastructure action is executed. The interface is prepared for future AI connectors, but any external processing or remediation must remain explicit, tenant-scoped and approval-gated.
+
+The map request carries the active company and tenancy headers through the shared API client. An invalid or expired local API key is cleared before the protected shell is displayed. See the [complete Mapa Vivo guide](docs/MAPA_VIVO.md) for architecture, API contract, privacy guarantees, operations and test scenarios.
 
 ### 5. Inventory
 
