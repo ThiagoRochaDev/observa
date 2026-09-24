@@ -10,7 +10,8 @@ API key / PAT / token, test, save, sync. No env files, no redeploys.
 Every connector implements (`packages/connectors/observa_connectors/base.py`):
 
 - `id` / `name` / `description`
-- `category`: `cloud` | `observability` | `incident` | `vcs_cicd` | `on_prem` | `saas` | `demo`
+- `category`: `cloud` | `observability` | `incident` | `vcs_cicd` | `automation` | `database` | `data` | `security` | `collaboration` | `on_prem` | `saas` | `demo`
+- `availability`: `native` (provider API) or `adapter` (customer-managed canonical API)
 - `icon`: slug the web UI maps to a colored badge (`apps/web/lib/api.ts` → `CONNECTOR_ICONS`)
 - `docs_url`: where the client generates their credential
 - `capabilities`: `cost`, `inventory`, `metrics`, …
@@ -95,14 +96,32 @@ instance/class or a list of instances; duplicate IDs never override built-in con
 |----|--------|
 | `mock-demo` | Ships a full synthetic dataset — cost, products, APM, alerts — for exploring the UI without any credentials |
 
-All 27 connectors in the catalog are now **Live** — each `pull()` calls the
+All 27 native connectors in the catalog are **Live** — each `pull()` calls the
 real vendor API. `oci` and `snowflake` sign the request/JWT with the
 credential's private key (request signing / key-pair auth) instead of a
 plain token, and need the optional `cryptography` dependency (`pip install
-observa-connectors[oci]` / `[snowflake]`, or `[all]`).
+observa-connectors[oci]` / `[snowflake]`, or `[all]`). GitHub is a native connector and supports
+repository inventory plus Actions usage through an organization PAT.
 
-New connector without a live vendor account to test against yet? Add a
-`_StubConnector` subclass (schema-only placeholder, `pull()` raises
-`NotImplementedError`) the same way the 9 above started out, then swap it
-for a real `BaseConnector` implementation once you're ready — see
-`providers/saas.py` for the pattern.
+## Extended adapter catalog
+
+Observa also ships 80 catalog entries for tools such as OpenTelemetry, Dynatrace, Loki, Jaeger,
+ServiceNow, Slack, Azure DevOps, Jenkins, Argo CD, Terraform Cloud, PostgreSQL, Redis, Kafka,
+Databricks, Wiz, Okta, SonarQube and Snyk. The complete manifest lives in
+`packages/connectors/observa_connectors/catalog.py`.
+
+These entries are marked **Via API Adapter**, never **Native**. Each one is operational when the
+customer provides an adapter URL implementing:
+
+- `GET /health`: HTTP 2xx when credentials and upstream access are ready;
+- `GET /observa/pull`: JSON object containing optional `costs`, `resources`, `metrics`, `logs` and
+  `message` fields using the types in `observa_connectors.base`;
+- optional bearer authentication configured and encrypted in the Observa connection form;
+- optional `since=YYYY-MM-DD` query parameter for incremental synchronization.
+
+The adapter runs in the customer's network and can call a paid SaaS API, an open-source tool, a
+legacy service or an internal platform. This keeps vendor-specific credentials and transformations
+under customer control while preserving the same tenancy isolation and normalized Observa signals.
+
+For direct provider support, add a native `BaseConnector` implementation and switch the catalog
+entry from adapter to native only after its credential test and pull behavior are covered by tests.

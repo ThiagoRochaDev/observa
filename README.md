@@ -161,9 +161,14 @@ Regardless of mode, every `/api` request already requires the shared API key des
 
 ## Supported connectors
 
-27 connectors out of the box, grouped by category, each with its own credential form and icon. AWS, GCP, Azure, Datadog, GitHub, GitLab, Cloudflare, DigitalOcean, PagerDuty, Sentry, Vercel, Stripe, New Relic, MongoDB Atlas, Kubernetes, and Prometheus pull real data today; the rest are UI-ready stubs. Full list, auth type, and status: [docs/CONNECTORS.md](docs/CONNECTORS.md).
+107 connectors out of the box: 27 native integrations and 80 adapters covering cloud, observability,
+incident response, CI/CD, automation, databases, streaming, security, collaboration and on-premise
+platforms. Native connectors such as AWS, GCP, Azure, Datadog, GitHub, GitLab, Kubernetes and
+Prometheus call the provider directly. Adapter connectors consume the canonical Observa API from
+an endpoint controlled by the customer. Full model and status: [docs/CONNECTORS.md](docs/CONNECTORS.md).
 
-Don't see your tool? The **Custom / On-premise (HTTP)** connector polls any internal endpoint that returns JSON in Observa's `cost`/`resource`/`metric` shape — the fastest way to wire up something in-house without writing a new connector.
+Don't see your tool? The **Custom / On-premise (HTTP)** connector and the API Adapter contract
+connect internal or niche systems without changing Observa's core.
 
 Connector packages can also register themselves through the `observa.connectors` Python
 entry-point group and appear automatically in the catalog. See

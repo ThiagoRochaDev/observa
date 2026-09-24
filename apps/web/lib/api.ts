@@ -107,7 +107,7 @@ export const CONNECTOR_ICONS: Record<string, { label: string; color: string; mon
   sentry: { label: 'Sentry', color: '#362D59', mono: 'SN' },
   pagerduty: { label: 'PagerDuty', color: '#06AC38', mono: 'PD' },
   opsgenie: { label: 'Opsgenie', color: '#2684FF', mono: 'OG' },
-  github: { label: 'GitHub', color: '#181717', mono: 'GH' },
+  github: { label: 'GitHub', color: '#D7DCE2', mono: 'GH' },
   gitlab: { label: 'GitLab', color: '#FC6D26', mono: 'GL' },
   bitbucket: { label: 'Bitbucket', color: '#0052CC', mono: 'BB' },
   kubernetes: { label: 'Kubernetes', color: '#326CE5', mono: 'K8' },
@@ -124,6 +124,11 @@ export const CATEGORY_LABELS: Record<string, string> = {
   observability: 'Observability & APM',
   incident: 'Incident management',
   vcs_cicd: 'Source control & CI/CD',
+  automation: 'Automation & delivery',
+  database: 'Databases & cache',
+  data: 'Data & streaming',
+  security: 'Security & identity',
+  collaboration: 'Collaboration & ITSM',
   on_prem: 'On-premise & self-hosted',
   saas: 'Billing & data SaaS',
 }
@@ -339,6 +344,7 @@ export type Connector = {
   category: string
   icon: string
   docs_url: string
+  availability?: 'native' | 'adapter'
   config_schema: JsonSchema
   secrets_schema: JsonSchema
 }

@@ -68,18 +68,38 @@ function PlatformMark({ icon }: { icon: string }): ReactNode {
   }
 }
 
-export default function ConnectorIcon({ icon, size = 40 }: { icon: string; size?: number }) {
+const NATIVE_MARKS = new Set([
+  'aws', 'gcp', 'azure', 'oci', 'digitalocean', 'linode', 'cloudflare', 'vercel', 'netlify',
+  'mongodb', 'datadog', 'newrelic', 'grafana', 'elastic', 'sentry', 'pagerduty', 'opsgenie',
+  'github', 'gitlab', 'bitbucket', 'kubernetes', 'onprem', 'splunk', 'stripe', 'snowflake', 'mock',
+])
+
+function initials(label: string) {
+  const parts = label.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean)
+  return (parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : parts[0]?.slice(0, 2) || '?').toUpperCase()
+}
+
+function colorFor(label: string) {
+  const colors = ['#70a7ff', '#55d6a4', '#c88cff', '#f2a65a', '#5ec8e5', '#e879a8', '#a5c96a']
+  const hash = [...label].reduce((total, character) => total + character.charCodeAt(0), 0)
+  return colors[hash % colors.length]
+}
+
+export default function ConnectorIcon({ icon, label, size = 40 }: { icon: string; label?: string; size?: number }) {
   const meta = CONNECTOR_ICONS[icon] || CONNECTOR_ICONS.generic
+  const color = CONNECTOR_ICONS[icon] ? meta.color : colorFor(label || icon)
 
   return (
     <span
       className="connector-platform-icon"
       aria-hidden="true"
-      style={{ '--connector-color': meta.color, width: size, height: size } as CSSProperties}
+      style={{ '--connector-color': color, width: size, height: size } as CSSProperties}
     >
-      <svg viewBox="0 0 24 24" focusable="false">
-        <PlatformMark icon={icon} />
-      </svg>
+      {NATIVE_MARKS.has(icon) ? (
+        <svg viewBox="0 0 24 24" focusable="false"><PlatformMark icon={icon} /></svg>
+      ) : (
+        <span className="connector-platform-monogram">{initials(label || meta.label)}</span>
+      )}
     </span>
   )
 }

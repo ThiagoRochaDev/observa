@@ -100,6 +100,9 @@ class BaseConnector(ABC):
     icon: str = "generic"
     #: docs URL shown next to the credential form (where to generate a PAT/token)
     docs_url: str = ""
+    #: "native" talks directly to the provider API; "adapter" consumes the
+    #: Observa canonical API exposed by a customer-managed adapter.
+    availability: str = "native"
 
     @abstractmethod
     def config_schema(self) -> dict[str, Any]:

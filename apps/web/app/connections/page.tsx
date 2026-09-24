@@ -19,7 +19,10 @@ function fieldsFromSchema(schema: JsonSchema) {
   }))
 }
 
-const CATEGORY_ORDER = ['demo', 'cloud', 'observability', 'incident', 'vcs_cicd', 'on_prem', 'saas']
+const CATEGORY_ORDER = [
+  'demo', 'cloud', 'observability', 'incident', 'vcs_cicd', 'automation',
+  'database', 'data', 'security', 'collaboration', 'on_prem', 'saas',
+]
 
 export default function ConnectionsPage() {
   const [connectors, setConnectors] = useState<Connector[]>([])
@@ -51,7 +54,7 @@ export default function ConnectionsPage() {
     return connectors.filter((connector) => {
       if (category !== 'all' && connector.category !== category) return false
       if (!normalizedQuery) return true
-      return [connector.name, connector.description, connector.category, ...connector.capabilities]
+      return [connector.name, connector.description, connector.category, connector.availability, ...connector.capabilities]
         .join(' ')
         .toLowerCase()
         .includes(normalizedQuery)
@@ -251,16 +254,19 @@ export default function ConnectionsPage() {
                       return (
                         <article key={connector.id} className={`connector-plugin-card ${connector.id === connectorId ? 'selected' : ''}`}>
                           <div className="connector-plugin-top">
-                            <ConnectorIcon icon={connector.icon} size={46} />
+                            <ConnectorIcon icon={connector.icon} label={connector.name} size={46} />
                             <div><strong>{connector.name}</strong><span>{CATEGORY_LABELS[connector.category] || connector.category}</span></div>
                             {installed && <span className="connector-installed-dot" title="Instalado" />}
                           </div>
+                          <span className={`connector-availability ${connector.availability === 'adapter' ? 'adapter' : 'native'}`}>
+                            {connector.availability === 'adapter' ? 'Via API Adapter' : 'Integração nativa'}
+                          </span>
                           <p>{connector.description}</p>
                           <div className="connector-plugin-capabilities">
                             {connector.capabilities.slice(0, 4).map((capability) => <span key={capability}>{capability}</span>)}
                           </div>
                           <button type="button" onClick={() => selectConnector(connector)}>
-                            {installed ? 'Adicionar outra' : 'Configurar'} <span aria-hidden="true">→</span>
+                            {installed ? 'Adicionar outra' : connector.availability === 'adapter' ? 'Conectar adapter' : 'Configurar'} <span aria-hidden="true">→</span>
                           </button>
                         </article>
                       )
@@ -281,7 +287,7 @@ export default function ConnectionsPage() {
                   const connector = connectors.find((item) => item.id === connection.connector_id)
                   return (
                     <article className="installed-connection-card" key={connection.id}>
-                      <ConnectorIcon icon={connector?.icon || 'generic'} size={42} />
+                      <ConnectorIcon icon={connector?.icon || 'generic'} label={connector?.name || connection.name} size={42} />
                       <div className="installed-connection-copy">
                         <div><strong>{connection.name}</strong><span className={`badge ${connection.last_sync_status === 'ok' ? 'ok' : connection.last_sync_status ? 'fail' : ''}`}>{connection.last_sync_status || 'não sincronizado'}</span></div>
                         <p>{connector?.name || connection.connector_id}</p>
@@ -303,11 +309,14 @@ export default function ConnectionsPage() {
         {selected && (
           <aside className="connector-detail" aria-label={`Configurar ${selected.name}`}>
             <div className="connector-detail-head">
-              <ConnectorIcon icon={selected.icon} size={48} />
+              <ConnectorIcon icon={selected.icon} label={selected.name} size={48} />
               <div><span>Configurar conector</span><h2>{selected.name}</h2></div>
               <button type="button" onClick={() => setConnectorId(null)} aria-label="Fechar configuração">×</button>
             </div>
             <p className="connector-detail-description">{selected.description}</p>
+            {selected.availability === 'adapter' && (
+              <div className="connector-detail-adapter"><strong>Integração por API Adapter</strong><p>Conecte um adapter hospedado pela sua empresa que exponha o contrato canônico do Observa.</p></div>
+            )}
             <div className="connector-detail-privacy"><span aria-hidden="true">◆</span><div><strong>Escopo isolado</strong><p>Dados e credenciais ficam vinculados à tenancy ativa.</p></div></div>
             {selected.docs_url && <a className="connector-docs-link" href={selected.docs_url} target="_blank" rel="noreferrer">Onde obter as credenciais ↗</a>}
             <form className="form connector-detail-form" onSubmit={onCreate}>

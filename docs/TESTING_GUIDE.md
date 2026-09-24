@@ -2137,3 +2137,23 @@ alteram conexões de outro contexto.
 
 Esperado: ícones não geram chamadas externas; tokens e secrets não aparecem em respostas de
 listagem, HTML, logs do console ou valores preenchidos novamente.
+
+### CON-UI-006 — Catálogo amplo e tipos de integração
+
+1. Abra `/connections` e confira a quantidade total de conectores.
+2. Pesquise por `GitHub`, `OpenTelemetry`, `Jenkins`, `PostgreSQL`, `Kafka`, `Slack` e `SonarQube`.
+3. Compare os badges **Integração nativa** e **Via API Adapter**.
+4. Filtre as categorias cloud, observabilidade, automação, bancos, dados, segurança e colaboração.
+
+Esperado: GitHub aparece como integração nativa; as ferramentas adicionais aparecem como adapters
+configuráveis e nenhuma delas é apresentada incorretamente como integração nativa.
+
+### CON-UI-007 — Sincronização por API Adapter
+
+1. Suba um endpoint de teste com `GET /health` retornando HTTP `200`.
+2. Faça `GET /observa/pull` retornar listas `costs`, `resources`, `metrics` e `logs` no contrato canônico.
+3. No catálogo, abra uma ferramenta marcada **Via API Adapter**.
+4. Informe URL, paths e bearer token opcional; teste, salve e sincronize.
+
+Esperado: o teste confirma o health check; a sincronização persiste os quatro tipos de sinal na
+company e tenancy ativas, sem expor o token na interface ou nas respostas da API.

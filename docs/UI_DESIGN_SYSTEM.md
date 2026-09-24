@@ -141,6 +141,16 @@ copiar identidade visual de terceiros. O fluxo é dividido entre **Catálogo** e
 Os ícones são SVGs incorporados ao frontend e não fazem requisições a CDNs. Secrets nunca são
 preenchidos novamente na interface e devem permanecer criptografados no backend.
 
+O catálogo diferencia dois níveis de integração:
+
+- **Integração nativa**: o Observa se comunica diretamente com a API oficial da ferramenta.
+- **Via API Adapter**: um adapter controlado pelo cliente converte a ferramenta para os contratos
+  canônicos de custos, recursos, métricas e logs do Observa.
+
+Conectores via adapter usam ícones monogramados locais, teste de saúde, bearer token opcional e
+ingestão por `GET /observa/pull`. O adapter permanece no ambiente do cliente, permitindo integrar
+ferramentas SaaS, open source, legadas ou internas sem enviar credenciais para terceiros.
+
 ## Regras para novas telas
 
 1. Renderize a rota dentro do layout raiz existente.

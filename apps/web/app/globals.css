@@ -4945,6 +4945,13 @@ textarea {
   overflow: visible;
 }
 
+.connector-platform-monogram {
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: -.02em;
+}
+
 .connector-card-copy {
   min-width: 0;
   flex: 1;
@@ -5277,6 +5284,31 @@ textarea {
   box-shadow: 0 0 0 3px #55d6a415;
 }
 
+.connector-availability {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 3px 6px;
+  border: 1px solid #34404d;
+  border-radius: 4px;
+  color: #8290a0;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.connector-availability.native {
+  border-color: #55d6a43d;
+  background: #55d6a40d;
+  color: #72dcb5;
+}
+
+.connector-availability.adapter {
+  border-color: #70a7ff3d;
+  background: #70a7ff0d;
+  color: #91bbff;
+}
+
 .connector-plugin-card > p {
   display: -webkit-box;
   overflow: hidden;
@@ -5444,6 +5476,27 @@ textarea {
   border: 1px solid #55d6a435;
   border-radius: 6px;
   background: #55d6a40b;
+}
+
+.connector-detail-adapter {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #70a7ff35;
+  border-radius: 6px;
+  background: #70a7ff0b;
+}
+
+.connector-detail-adapter strong {
+  display: block;
+  color: #a9c8fb;
+  font-size: 9px;
+}
+
+.connector-detail-adapter p {
+  margin: 3px 0 0;
+  color: #7893b5;
+  font-size: 8px;
+  line-height: 1.45;
 }
 
 .connector-detail-privacy > span {

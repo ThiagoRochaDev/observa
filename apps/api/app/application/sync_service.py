@@ -27,6 +27,7 @@ def catalog_connectors() -> list[dict[str, Any]]:
                 "category": c.category,
                 "icon": c.icon,
                 "docs_url": c.docs_url,
+                "availability": c.availability,
                 "config_schema": c.config_schema(),
                 "secrets_schema": c.secrets_schema(),
             }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from importlib.metadata import entry_points
 
 from observa_connectors.base import BaseConnector
+from observa_connectors.catalog import ADAPTER_CATALOG
 from observa_connectors.mock_demo import MockDemoConnector
 from observa_connectors.providers.aws import AwsCostConnector
 from observa_connectors.providers.azure import AzureCostConnector
@@ -71,6 +72,9 @@ _CONNECTORS: list[BaseConnector] = [
     # Billing / data SaaS
     StripeConnector(),
     SnowflakeConnector(),
+    # Broad integration catalog. These connectors use a customer-managed
+    # Observa API adapter and are clearly identified as such in the UI.
+    *ADAPTER_CATALOG,
 ]
 
 
