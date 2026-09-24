@@ -115,6 +115,7 @@ export const CONNECTOR_ICONS: Record<string, { label: string; color: string; mon
   splunk: { label: 'Splunk', color: '#000000', mono: 'SP' },
   stripe: { label: 'Stripe', color: '#635BFF', mono: 'ST' },
   snowflake: { label: 'Snowflake', color: '#29B5E8', mono: 'SF' },
+  mcp: { label: 'Model Context Protocol', color: '#A78BFA', mono: 'MCP' },
   generic: { label: 'Custom', color: '#9ca3af', mono: '?' },
 }
 

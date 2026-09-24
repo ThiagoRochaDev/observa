@@ -2157,3 +2157,15 @@ configuráveis e nenhuma delas é apresentada incorretamente como integração n
 
 Esperado: o teste confirma o health check; a sincronização persiste os quatro tipos de sinal na
 company e tenancy ativas, sem expor o token na interface ou nas respostas da API.
+
+### CON-UI-008 — Conexão MCP
+
+1. Inicie um servidor MCP Streamable HTTP compatível com `2026-07-28`.
+2. Exponha uma tool `observa_pull` que retorne `structuredContent` com `costs`, `resources`,
+   `metrics` e `logs` no contrato canônico.
+3. Pesquise `MCP` no catálogo e clique em **Configurar**.
+4. Informe endpoint, nome da tool, argumentos JSON e bearer token opcional.
+5. Clique em **Testar conexão**, salve e sincronize.
+
+Esperado: o teste usa `tools/list` e confirma a tool; a sincronização chama somente a tool
+configurada via `tools/call`; o token não é retornado pela API e os sinais ficam isolados na tenancy.

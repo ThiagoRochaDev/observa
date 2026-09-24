@@ -61,6 +61,8 @@ function PlatformMark({ icon }: { icon: string }): ReactNode {
       return <path d="M18 7.2c-1.5-.7-3.2-1-4.8-1-2.8 0-4.7 1.4-4.7 3.6 0 3.7 5.1 3.1 5.1 4.7 0 .6-.6.9-1.5.9-1.4 0-3.1-.6-4.5-1.4v3.7c1.6.7 3.3 1.1 5.2 1.1 2.9 0 4.9-1.4 4.9-3.7 0-4-5.1-3.3-5.1-4.8 0-.5.5-.8 1.4-.8 1.2 0 2.7.4 4 1.1V7.2Z" fill="currentColor" />
     case 'snowflake':
       return <><path {...stroke} d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.8 5.2 12 7.4l2.2-2.2M9.8 18.8l2.2-2.2 2.2 2.2" /></>
+    case 'mcp':
+      return <><circle {...stroke} cx="6" cy="12" r="2.4" /><circle {...stroke} cx="18" cy="6" r="2.4" /><circle {...stroke} cx="18" cy="18" r="2.4" /><path {...stroke} d="m8.2 10.9 7.6-3.8M8.2 13.1l7.6 3.8" /></>
     case 'mock':
       return <><path {...stroke} d="m12 3 1.2 4.4L17 9l-3.8 1.6L12 15l-1.2-4.4L7 9l3.8-1.6L12 3Z" /><path {...stroke} d="m6 14 .7 2.3L9 17l-2.3.7L6 20l-.7-2.3L3 17l2.3-.7L6 14ZM18 12l.6 1.8 1.9.7-1.9.7L18 17l-.6-1.8-1.9-.7 1.9-.7L18 12Z" /></>
     default:
@@ -71,7 +73,7 @@ function PlatformMark({ icon }: { icon: string }): ReactNode {
 const NATIVE_MARKS = new Set([
   'aws', 'gcp', 'azure', 'oci', 'digitalocean', 'linode', 'cloudflare', 'vercel', 'netlify',
   'mongodb', 'datadog', 'newrelic', 'grafana', 'elastic', 'sentry', 'pagerduty', 'opsgenie',
-  'github', 'gitlab', 'bitbucket', 'kubernetes', 'onprem', 'splunk', 'stripe', 'snowflake', 'mock',
+  'github', 'gitlab', 'bitbucket', 'kubernetes', 'onprem', 'splunk', 'stripe', 'snowflake', 'mcp', 'mock',
 ])
 
 function initials(label: string) {

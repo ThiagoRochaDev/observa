@@ -161,11 +161,14 @@ Regardless of mode, every `/api` request already requires the shared API key des
 
 ## Supported connectors
 
-107 connectors out of the box: 27 native integrations and 80 adapters covering cloud, observability,
+108 connectors out of the box: 28 native integrations and 80 adapters covering cloud, observability,
 incident response, CI/CD, automation, databases, streaming, security, collaboration and on-premise
 platforms. Native connectors such as AWS, GCP, Azure, Datadog, GitHub, GitLab, Kubernetes and
 Prometheus call the provider directly. Adapter connectors consume the canonical Observa API from
 an endpoint controlled by the customer. Full model and status: [docs/CONNECTORS.md](docs/CONNECTORS.md).
+
+The native **Model Context Protocol (MCP)** connector can discover a remote server's tools and call
+a selected tool over Streamable HTTP to ingest canonical Observa signals.
 
 Don't see your tool? The **Custom / On-premise (HTTP)** connector and the API Adapter contract
 connect internal or niche systems without changing Observa's core.

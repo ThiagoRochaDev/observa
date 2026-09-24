@@ -13,6 +13,7 @@ from observa_connectors.providers.elastic_cloud import ElasticCloudConnector
 from observa_connectors.providers.gcp import GcpBillingConnector
 from observa_connectors.providers.grafana_cloud import GrafanaCloudConnector
 from observa_connectors.providers.linode import LinodeConnector
+from observa_connectors.providers.mcp import McpConnector
 from observa_connectors.providers.netlify import NetlifyConnector
 from observa_connectors.providers.oci import OciConnector
 from observa_connectors.providers.onprem import (
@@ -69,6 +70,7 @@ _CONNECTORS: list[BaseConnector] = [
     PrometheusConnector(),
     SplunkConnector(),
     OnPremAgentConnector(),
+    McpConnector(),
     # Billing / data SaaS
     StripeConnector(),
     SnowflakeConnector(),

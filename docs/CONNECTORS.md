@@ -77,6 +77,11 @@ instance/class or a list of instances; duplicate IDs never override built-in con
 | `gitlab` | **Live** — projects | PAT |
 | `bitbucket` | **Live** — repos | App password |
 
+### Automation and MCP
+| ID | Status | Auth |
+|----|--------|------|
+| `mcp` | **Live** — `tools/list` discovery + configurable `tools/call` ingestion | Optional bearer token |
+
 ### On-premise & self-hosted
 | ID | Status | Auth |
 |----|--------|------|
@@ -96,7 +101,7 @@ instance/class or a list of instances; duplicate IDs never override built-in con
 |----|--------|
 | `mock-demo` | Ships a full synthetic dataset — cost, products, APM, alerts — for exploring the UI without any credentials |
 
-All 27 native connectors in the catalog are **Live** — each `pull()` calls the
+All 28 native connectors in the catalog are **Live** — each `pull()` calls the
 real vendor API. `oci` and `snowflake` sign the request/JWT with the
 credential's private key (request signing / key-pair auth) instead of a
 plain token, and need the optional `cryptography` dependency (`pip install
@@ -122,6 +127,23 @@ customer provides an adapter URL implementing:
 The adapter runs in the customer's network and can call a paid SaaS API, an open-source tool, a
 legacy service or an internal platform. This keeps vendor-specific credentials and transformations
 under customer control while preserving the same tenancy isolation and normalized Observa signals.
+
+## MCP connector
+
+The native `mcp` connector supports the stateless `2026-07-28` Streamable HTTP protocol. It sends
+the protocol version and routing headers on each request, discovers the configured tool with
+`tools/list`, and invokes it with `tools/call`. The result must expose Observa canonical signals in
+`structuredContent` or as JSON text content.
+
+Configuration and secrets are tenancy-scoped:
+
+- MCP endpoint URL and ingestion tool name;
+- optional JSON arguments passed only to that tool;
+- configurable protocol version for compatible servers;
+- optional bearer token encrypted with the other connector credentials.
+
+Use network allowlists for MCP egress and grant the token only the tools needed by Observa. The
+connector never executes a tool other than the explicitly configured ingestion tool during sync.
 
 For direct provider support, add a native `BaseConnector` implementation and switch the catalog
 entry from adapter to native only after its credential test and pull behavior are covered by tests.
