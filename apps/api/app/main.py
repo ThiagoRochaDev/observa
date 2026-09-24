@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.db import init_db
 from app.core.security import get_or_create_api_key
 from app.presentation.api.auth_flow_router import router as auth_flow_router
+from app.presentation.api.mcp_router import mcp_router
 from app.presentation.api.router import organization_router, router
 
 settings = get_settings()
@@ -48,6 +49,7 @@ app.include_router(organization_router, prefix="/api")
 # credential in the first place, matching the redirect_uri the settings
 # page defaults providers to (http://localhost:8080/auth/callback/{provider}).
 app.include_router(auth_flow_router)
+app.include_router(mcp_router)
 
 
 @app.get("/")

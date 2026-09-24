@@ -169,6 +169,8 @@ an endpoint controlled by the customer. Full model and status: [docs/CONNECTORS.
 
 The native **Model Context Protocol (MCP)** connector can discover a remote server's tools and call
 a selected tool over Streamable HTTP to ingest canonical Observa signals.
+Observa also exposes a protected, read-only MCP server at `/mcp` for assistants and automation;
+setup and tool contracts are documented in [docs/MCP.md](docs/MCP.md).
 
 Don't see your tool? The **Custom / On-premise (HTTP)** connector and the API Adapter contract
 connect internal or niche systems without changing Observa's core.

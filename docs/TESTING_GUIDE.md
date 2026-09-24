@@ -2169,3 +2169,39 @@ company e tenancy ativas, sem expor o token na interface ou nas respostas da API
 
 Esperado: o teste usa `tools/list` e confirma a tool; a sincronização chama somente a tool
 configurada via `tools/call`; o token não é retornado pela API e os sinais ficam isolados na tenancy.
+
+## 28. Observa como servidor MCP
+
+### MCP-SRV-001 — Autenticação e descoberta
+
+1. Faça `POST /mcp` sem token e confirme HTTP `401`.
+2. Repita com `Authorization: Bearer <token>` e os headers de company/tenancy.
+3. Envie `tools/list` com `MCP-Protocol-Version: 2026-07-28` e `Mcp-Method: tools/list`.
+
+Esperado: somente a chamada autenticada retorna as tools; todas declaram `readOnlyHint=true` e
+`destructiveHint=false`.
+
+### MCP-SRV-002 — Consulta de custos
+
+1. Chame `observa_cost_summary` com `{"days":30}`.
+2. Use `Mcp-Method: tools/call` e `Mcp-Name: observa_cost_summary`.
+3. Compare `structuredContent` com `GET /api/costs/summary?days=30` no mesmo contexto.
+
+Esperado: totais, providers, produtos e squads pertencem somente à tenancy selecionada; nenhum
+secret ou dado de conexão aparece na resposta.
+
+### MCP-SRV-003 — Inventário, produtos e alertas
+
+1. Chame `observa_inventory` com `limit=2`.
+2. Chame `observa_products`.
+3. Chame `observa_alerts` com status e limite.
+
+Esperado: limites são respeitados, respostas possuem `structuredContent` e conteúdo textual JSON,
+e todos os registros pertencem à company e tenancy dos headers.
+
+### MCP-SRV-004 — Proteção contra roteamento divergente
+
+1. Envie corpo com método `tools/list` e header `Mcp-Method: tools/call`.
+2. Envie `tools/call` para uma tool e um `Mcp-Name` diferente.
+
+Esperado: o endpoint retorna erro JSON-RPC `-32020` e não executa consulta nem ferramenta.
