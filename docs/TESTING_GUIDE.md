@@ -2207,6 +2207,11 @@ e todos os registros pertencem à company e tenancy dos headers.
 Esperado: o endpoint retorna erro JSON-RPC `-32020` e não executa consulta nem ferramenta.
 # Homologação enterprise
 
+Para uma execução manual completa, tela por tela, use também
+[`MANUAL_ACCEPTANCE_GUIDE.md`](MANUAL_ACCEPTANCE_GUIDE.md). O documento inclui
+pré-condições, passos, resultados esperados, limpeza, CLI, mobile, MCP, segurança,
+backup, carga e critérios de aceite.
+
 Além dos cenários funcionais deste guia, execute a seguinte sequência antes de
 promover uma versão para produção.
 
