@@ -152,48 +152,34 @@ export default function ConnectionsPage() {
 
   return (
     <div>
-      <h1 className="page-title">Connections</h1>
+      <h1 className="page-title">Conexões</h1>
       <p className="page-sub">
-        Pick a tool below, paste its API key / PAT / token, and Observa takes it from there —
-        no env files, no redeploys. Everything is encrypted at rest.
+        Conecte clouds, observabilidade, incidentes, repositórios e ambientes privados. Credenciais
+        são criptografadas no servidor e nunca voltam a ser exibidas.
       </p>
 
       {error && <p className="error">{error}</p>}
       {msg && <p className="muted">{msg}</p>}
 
       {!selected && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div className="connector-catalog">
           {grouped.map(({ category, items }) => (
-            <div key={category}>
-              <h3 style={{ marginBottom: '0.6rem', color: 'var(--text)' }}>
+            <section key={category} className="connector-category">
+              <h2>
                 {CATEGORY_LABELS[category] || category}
-              </h3>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                  gap: '0.75rem',
-                }}
-              >
+              </h2>
+              <div className="connector-grid">
                 {items.map((c) => (
                   <button
                     key={c.id}
                     type="button"
-                    className="card"
+                    className="card connector-catalog-card"
                     onClick={() => selectConnector(c)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '0.65rem',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      border: '1px solid var(--border)',
-                    }}
                   >
-                    <ConnectorIcon icon={c.icon} />
-                    <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</div>
-                      <div className="muted" style={{ fontSize: '0.82rem', marginTop: 2 }}>
+                    <ConnectorIcon icon={c.icon} size={44} />
+                    <div className="connector-card-copy">
+                      <strong>{c.name}</strong>
+                      <div className="muted">
                         {c.description}
                       </div>
                       <div className="row" style={{ marginTop: 6, flexWrap: 'wrap', gap: 4 }}>
@@ -207,15 +193,15 @@ export default function ConnectionsPage() {
                   </button>
                 ))}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       )}
 
       {selected && (
         <div className="card" style={{ marginBottom: '1.25rem' }}>
-          <div className="row" style={{ alignItems: 'center', marginBottom: '0.75rem' }}>
-            <ConnectorIcon icon={selected.icon} />
+          <div className="row connector-form-head">
+            <ConnectorIcon icon={selected.icon} size={48} />
             <div>
               <h3 style={{ color: 'var(--text)' }}>{selected.name}</h3>
               <p className="muted" style={{ fontSize: '0.85rem' }}>{selected.description}</p>
@@ -274,7 +260,7 @@ export default function ConnectionsPage() {
       )}
 
       <div className="card">
-        <h3 style={{ marginBottom: '0.75rem', color: 'var(--text)' }}>Saved connections</h3>
+        <h3 style={{ marginBottom: '0.75rem', color: 'var(--text)' }}>Conexões salvas</h3>
         {connections.length === 0 ? (
           <p className="muted">No connections yet — pick a tool above to add one.</p>
         ) : (
@@ -288,12 +274,17 @@ export default function ConnectionsPage() {
               </tr>
             </thead>
             <tbody>
-              {connections.map((c) => (
+              {connections.map((c) => {
+                const connector = connectors.find((item) => item.id === c.connector_id)
+                return (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
                   <td>
-                    <span className="badge">{c.connector_id}</span>
+                    <div className="saved-connection-name">
+                      <ConnectorIcon icon={connector?.icon || 'generic'} size={30} />
+                      <span>{c.name}</span>
+                    </div>
                   </td>
+                  <td><span className="badge">{connector?.name || c.connector_id}</span></td>
                   <td>
                     {c.last_sync_status ? (
                       <span className={`badge ${c.last_sync_status === 'ok' ? 'ok' : 'fail'}`}>
@@ -319,7 +310,8 @@ export default function ConnectionsPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}
