@@ -125,6 +125,22 @@ O shell e os componentes compartilhados são aplicados a:
 - `apps/web/app/globals.css`: tokens e estilos compartilhados.
 - `apps/web/components/EcosystemMap.tsx`: experiência especializada do Mapa Vivo.
 
+## Marketplace de conexões
+
+A rota `/connections` usa um navegador de integrações inspirado em gerenciadores de plugins, sem
+copiar identidade visual de terceiros. O fluxo é dividido entre **Catálogo** e **Instalados**, com:
+
+- busca textual por nome, descrição, categoria ou capacidade;
+- filtro lateral por categoria e contagem de conectores;
+- cards com ícones locais das plataformas, descrição e capacidades;
+- indicador visual de conector já instalado;
+- painel lateral de configuração, teste e salvamento;
+- lista separada para sincronizar ou remover conexões existentes;
+- aviso de isolamento por company e tenancy.
+
+Os ícones são SVGs incorporados ao frontend e não fazem requisições a CDNs. Secrets nunca são
+preenchidos novamente na interface e devem permanecer criptografados no backend.
+
 ## Regras para novas telas
 
 1. Renderize a rota dentro do layout raiz existente.

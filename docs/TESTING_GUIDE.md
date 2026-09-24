@@ -2074,3 +2074,54 @@ npm run lint -- --quiet
 ```
 
 Esperado: os dois comandos terminam sem erros.
+
+## 27. Marketplace de conexões
+
+### CON-UI-001 — Catálogo, busca e categorias
+
+1. Abra `/connections` e mantenha a aba **Catálogo** selecionada.
+2. Pesquise por `AWS`, `logs` e `git` separadamente.
+3. Limpe a busca e selecione as categorias **Cloud**, **Observabilidade** e **Código e CI/CD**.
+4. Compare a quantidade exibida em cada filtro com os cards apresentados.
+
+Esperado: a lista responde imediatamente, apresenta apenas conectores compatíveis e mantém os
+ícones locais das plataformas sem buscar imagens em domínios externos.
+
+### CON-UI-002 — Painel de configuração
+
+1. No catálogo, clique em **Configurar** em um conector.
+2. Confira nome, descrição, capacidades, documentação e campos do schema.
+3. Clique no botão de fechar e abra outro conector.
+4. Redimensione a janela para `1024px`, `768px` e `390px`.
+
+Esperado: o painel abre ao lado do catálogo em telas largas e abaixo dele nas demais; nenhuma
+credencial existente é exibida e o aviso de isolamento informa a tenancy ativa.
+
+### CON-UI-003 — Teste e criação
+
+1. Abra um conector e preencha nome, configuração e secrets de uma conta de teste.
+2. Clique em **Testar conexão**.
+3. Após sucesso, clique em **Salvar conexão**.
+4. Abra a aba **Instalados**.
+
+Esperado: erros são mostrados sem revelar secrets; após salvar, a conexão aparece em **Instalados**
+e o catálogo mostra o indicador verde no conector correspondente.
+
+### CON-UI-004 — Conexões instaladas
+
+1. Abra a aba **Instalados**.
+2. Pesquise pelo nome de uma conexão.
+3. Clique em **Sincronizar** e confira o status retornado.
+4. Em uma conexão descartável, clique em **Excluir** e confirme que ela desaparece da lista.
+
+Esperado: somente conexões da company e tenancy ativas são listadas; sincronização e remoção não
+alteram conexões de outro contexto.
+
+### CON-UI-005 — Privacidade no navegador
+
+1. Abra as ferramentas de desenvolvimento na aba **Network**.
+2. Navegue no catálogo, pesquise, filtre e abra o painel de configuração.
+3. Inspecione requisições, HTML e estado dos campos após salvar uma conexão.
+
+Esperado: ícones não geram chamadas externas; tokens e secrets não aparecem em respostas de
+listagem, HTML, logs do console ou valores preenchidos novamente.
