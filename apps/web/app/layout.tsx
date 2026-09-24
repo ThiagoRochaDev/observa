@@ -1,14 +1,19 @@
 import type { ReactNode } from 'react'
-import { DM_Sans } from 'next/font/google'
+import { Geist, Geist_Mono } from 'next/font/google'
 import { ApiKeyGate } from '@/components/ApiKeyGate'
 import { Shell } from '@/components/Shell'
 import './globals.css'
 
-const dmSans = DM_Sans({
+const geist = Geist({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   display: 'swap',
-  variable: '--font-dm-sans',
+  variable: '--font-geist',
+})
+
+const geistMono = Geist_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-geist-mono',
 })
 
 export const metadata = {
@@ -18,8 +23,8 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={dmSans.variable}>
-      <body className={dmSans.className}>
+    <html lang="pt-BR" className={`${geist.variable} ${geistMono.variable}`}>
+      <body className={geist.className}>
         <ApiKeyGate>
           <Shell>{children}</Shell>
         </ApiKeyGate>

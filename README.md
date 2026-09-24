@@ -30,6 +30,7 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
 - [Privacy and isolation](docs/PRIVACY_SECURITY.md)
 - [Log diagnosis and remediation](docs/REMEDIATION.md)
 - [Mapa Vivo and contextual assistant](docs/MAPA_VIVO.md)
+- [Web design system](docs/UI_DESIGN_SYSTEM.md)
 - [Complete testing guide](docs/TESTING_GUIDE.md)
 - [Architecture](#architecture)
 - [Principles](#principles)

@@ -2025,3 +2025,52 @@ assistente local operam somente em leitura.
 
 Esperado: a topologia anterior não é misturada com a nova seleção, a interface exibe erro sem
 mostrar dados de outro contexto e volta a carregar após a recuperação da API.
+
+## 26. Sistema visual global
+
+### UI-001 — Shell presente em todas as rotas
+
+Abra `/`, `/products`, `/maps`, `/inventory`, `/budgets`, `/governance`, `/dashboards`,
+`/observability`, `/logs`, `/traces`, `/monitors`, `/rum`, `/gcp`, `/alerts`, `/remediations`,
+`/connections`, `/settings/organizations` e `/settings/auth`.
+
+Esperado: todas apresentam faixa de contexto, sidebar, header, seletor de company/tenancy, busca e
+indicador de política de IA. Nenhuma rota cria um shell paralelo.
+
+### UI-002 — Componentes visuais compartilhados
+
+1. Compare cards da visão geral, budgets, governança e observabilidade.
+2. Compare tabelas de produtos, inventário, logs, alertas e conexões.
+3. Compare inputs e botões de budgets, governança e configurações.
+
+Esperado: superfícies, bordas, raios, tipografia, foco, badges e estados hover seguem o mesmo sistema;
+nenhuma tela mantém gradiente ou card do tema anterior.
+
+### UI-003 — Modo compacto e responsivo
+
+1. Teste larguras de `1440px`, `1024px`, `830px`, `768px` e `390px`.
+2. Confira a sidebar, grids, tabelas e header.
+3. Navegue usando teclado.
+
+Esperado: em desktop a sidebar mostra rótulos; abaixo de `1000px` ela usa ícones; grids reduzem
+colunas progressivamente; tabelas preservam os dados com rolagem; foco permanece visível.
+
+### UI-004 — Troca de contexto
+
+1. Abra o seletor do header.
+2. Troque company e tenancy sem confirmar.
+3. Feche com `Esc` e confirme que o contexto não mudou.
+4. Abra novamente, selecione outro contexto e confirme.
+
+Esperado: a mudança só acontece no botão final; contexto de produção mostra aviso; após confirmar,
+a aplicação recarrega sem filtros ou seleções pertencentes à tenancy anterior.
+
+### UI-005 — Qualidade estática
+
+```powershell
+cd .\apps\web
+npm run typecheck
+npm run lint -- --quiet
+```
+
+Esperado: os dois comandos terminam sem erros.
