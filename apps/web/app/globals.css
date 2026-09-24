@@ -4632,6 +4632,158 @@ textarea {
   }
 }
 
+/* Authentication gate is independent from the dashboard grid */
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 24px;
+  background: #0d1117;
+}
+
+.auth-gate-card {
+  width: min(420px, 100%);
+  margin: auto;
+  padding: 26px;
+  border: 1px solid #354150;
+  border-radius: 12px;
+  background: #151b22;
+  box-shadow: 0 24px 70px #00000070;
+}
+
+.auth-gate-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 26px;
+  color: #f2f5f8;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.auth-gate-brand > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border: 2px solid #55d6a4;
+  border-radius: 50%;
+}
+
+.auth-gate-brand > span::after,
+.auth-gate-brand i {
+  content: '';
+  width: 5px;
+  height: 5px;
+  position: absolute;
+  border-radius: 50%;
+  background: #55d6a4;
+}
+
+.auth-gate-brand > span::after {
+  top: 2px;
+  right: 1px;
+  box-shadow: 0 0 0 3px #151b22;
+}
+
+.auth-gate-card .eyebrow {
+  color: #70a7ff;
+}
+
+.auth-gate-card h1 {
+  margin: 5px 0 0;
+  color: #f4f6f9;
+  font-size: 24px;
+  font-weight: 620;
+  letter-spacing: -0.025em;
+}
+
+.auth-gate-copy {
+  margin: 8px 0 20px;
+  color: #98a4b3;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.auth-gate-copy code {
+  color: #b8c8da;
+}
+
+.auth-gate-field {
+  margin-bottom: 12px;
+}
+
+.auth-gate-field label {
+  display: grid;
+  gap: 6px;
+  color: #9aa6b5;
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.auth-gate-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #354150;
+  border-radius: 7px;
+  background: #0f141a;
+  color: #eef2f6;
+  outline: none;
+}
+
+.auth-gate-field input:focus {
+  border-color: #70a7ff;
+  box-shadow: 0 0 0 3px #70a7ff20;
+}
+
+.auth-gate-card > .btn,
+.auth-gate-actions .btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.auth-gate-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-gate-security {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 0;
+  color: #738091;
+  font-size: 9px;
+  text-align: center;
+}
+
+.auth-gate-security span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #55d6a4;
+}
+
+@media (max-width: 520px) {
+  .auth-gate {
+    padding: 14px;
+  }
+
+  .auth-gate-card {
+    padding: 21px 18px;
+  }
+}
+
 /* Log explorer */
 .log-error { color: var(--danger); }
 .log-warn { color: var(--warning); }

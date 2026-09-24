@@ -85,20 +85,20 @@ export function ApiKeyGate({ children }: { children: ReactNode }) {
 
   if (mode === 'oidc') {
     return (
-      <div className="dash-layout" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="card" style={{ maxWidth: '28rem', width: '100%', margin: '4rem auto' }}>
-          <h1 style={{ marginBottom: '0.5rem' }}>Observa</h1>
-          <p className="muted" style={{ marginBottom: '1.25rem' }}>
-            Sign in to continue.
-          </p>
+      <div className="auth-gate">
+        <div className="auth-gate-card">
+          <div className="auth-gate-brand"><span aria-hidden="true"><i /></span>Observa</div>
+          <div className="eyebrow">Acesso corporativo</div>
+          <h1>Entrar no Observa</h1>
+          <p className="auth-gate-copy">Use o provedor de identidade configurado para continuar.</p>
           {error && <p className="error">{error}</p>}
           {providers.length === 0 ? (
             <p className="muted">
-              OIDC mode is on, but no provider is enabled yet — an operator needs to finish
-              setup in Settings → Authentication.
+              O modo OIDC está ativo, mas nenhum provedor foi habilitado. Um administrador precisa
+              concluir a configuração em Segurança e acesso.
             </p>
           ) : (
-            <div className="form" style={{ gap: '0.5rem' }}>
+            <div className="auth-gate-actions">
               {providers.map((p) => (
                 <button
                   key={p}
@@ -112,39 +112,41 @@ export function ApiKeyGate({ children }: { children: ReactNode }) {
               ))}
             </div>
           )}
+          <p className="auth-gate-security"><span aria-hidden="true" />Company e tenancy permanecem isoladas.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="dash-layout" style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <form
-        className="card"
-        onSubmit={trySubmit}
-        style={{ maxWidth: '28rem', width: '100%', margin: '4rem auto' }}
-      >
-        <h1 style={{ marginBottom: '0.5rem' }}>Observa</h1>
-        <p className="muted" style={{ marginBottom: '1rem' }}>
-          Paste the API key printed by the <code>api</code> service on first boot (also saved to{' '}
-          <code>data/api_key</code>).
+    <div className="auth-gate">
+      <form className="auth-gate-card" onSubmit={trySubmit}>
+        <div className="auth-gate-brand"><span aria-hidden="true"><i /></span>Observa</div>
+        <div className="eyebrow">Acesso local protegido</div>
+        <h1>Entrar no Observa</h1>
+        <p className="auth-gate-copy">
+          Informe a chave gerada pela API na primeira inicialização. Ela fica salva localmente em{' '}
+          <code>data/api_key</code>.
         </p>
-        <div className="form">
-          <label>
-            API key
+        <div className="auth-gate-field">
+          <label htmlFor="observa-api-key">
+            Chave da API
             <input
+              id="observa-api-key"
               type="password"
               autoFocus
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="..."
+              placeholder="Cole sua chave local"
+              autoComplete="current-password"
             />
           </label>
         </div>
         {error && <p className="error">{error}</p>}
         <button className="btn btn-primary" type="submit" disabled={checking}>
-          {checking ? 'Checking…' : 'Unlock'}
+          {checking ? 'Validando…' : 'Acessar plataforma'}
         </button>
+        <p className="auth-gate-security"><span aria-hidden="true" />A chave é validada somente pela sua API do Observa.</p>
       </form>
     </div>
   )
