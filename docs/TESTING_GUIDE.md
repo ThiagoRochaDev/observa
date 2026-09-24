@@ -1897,3 +1897,61 @@ Com token sem membership, tente IDs válidos e inválidos em `/api/context`, `/a
 
 Esperado: `403` para company não autorizada, `404` para tenancy inexistente e nenhum metadado do
 cliente na resposta.
+
+## 25. Mapa Vivo e assistente contextual
+
+### MAP-001 — Carregamento da topologia
+
+1. Acesse `http://localhost:3000/maps`.
+2. Selecione o produto `hiperlocal`.
+3. Confira os contadores de componentes, conexões e integrações externas.
+4. Use zoom, redução e ajuste automático do mapa.
+
+Esperado: nós e conexões retornados pela API aparecem no canvas sem sobreposição crítica, com
+legenda por tipo e painel do primeiro componente selecionado.
+
+### MAP-002 — Inspeção de componente
+
+1. Selecione um nó do mapa.
+2. Confira produto, camada, entradas, saídas, tipo e identificador.
+3. Clique em uma dependência direta no painel lateral.
+
+Esperado: o nó relacionado passa a ser selecionado, suas conexões ficam destacadas e o painel é
+atualizado sem nova requisição ou mistura de tenancy.
+
+### MAP-003 — Troca de produto
+
+1. Troque `hiperlocal` por `platform` no seletor.
+2. Aguarde a sincronização.
+3. Repita a inspeção de nós.
+
+Esperado: o mapa anterior desaparece durante o carregamento e somente a topologia de `platform`
+fica visível após a resposta.
+
+### MAP-004 — Pergunte ao Observa
+
+1. Clique em **Pergunte ao Observa**.
+2. Confira o produto e componente exibidos em **Contexto atual**.
+3. Escolha uma pergunta sugerida ou escreva uma pergunta.
+4. Pressione `Esc` para fechar o assistente.
+
+Esperado: a resposta informa entradas e saídas usando apenas a topologia local, declara que nenhum
+dado foi enviado para IA externa e que nenhuma alteração foi executada.
+
+### MAP-005 — Responsividade e teclado
+
+1. Teste a tela em larguras de `1440px`, `1024px`, `768px` e `390px`.
+2. Navegue por seletor, controles, dependências e assistente usando `Tab` e `Shift+Tab`.
+3. Verifique foco visível e legibilidade dos textos.
+
+Esperado: o inspetor passa para baixo do canvas em telas menores, o botão do assistente permanece
+acessível e nenhum controle essencial fica cortado.
+
+### AUTH-001 — Chave local expirada ou inválida
+
+1. Salve uma API key inválida no navegador e recarregue `/maps`.
+2. Confira que a interface protegida não permanece visível.
+3. Informe a chave atual em `data/api_key` e desbloqueie.
+
+Esperado: a credencial inválida é removida, o formulário de acesso reaparece e a aplicação só é
+liberada após `/api/health` validar a nova chave.

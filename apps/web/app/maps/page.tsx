@@ -5,59 +5,67 @@ import { useEffect, useState } from 'react'
 import { api, type Ecosystem } from '@/lib/api'
 
 const EcosystemMap = dynamic(
-  () => import('@/components/EcosystemMap').then((m) => m.EcosystemMap),
-  { ssr: false, loading: () => <p className="muted">Carregando mapa…</p> },
+  () => import('@/components/EcosystemMap').then((module) => module.EcosystemMap),
+  { ssr: false, loading: () => <div className="live-map-loading">Carregando topologia…</div> },
 )
 
 const PRODUCTS = ['hiperlocal', 'painel', 'gertrudes', 'delivery', 'platform']
 
 export default function MapsPage() {
   const [product, setProduct] = useState('hiperlocal')
-  const [eco, setEco] = useState<Ecosystem | null>(null)
+  const [ecosystem, setEcosystem] = useState<Ecosystem | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let active = true
+
     api
       .ecosystem(product)
-      .then(setEco)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .then((result) => {
+        if (active) setEcosystem(result)
+      })
+      .catch((caughtError) => {
+        if (active) setError(caughtError instanceof Error ? caughtError.message : String(caughtError))
+      })
+
+    return () => {
+      active = false
+    }
   }, [product])
 
+  function changeProduct(nextProduct: string) {
+    setError(null)
+    setEcosystem(null)
+    setProduct(nextProduct)
+  }
+
   return (
-    <div>
-      <h1 className="page-title">Mapas de ecossistema</h1>
-      <p className="page-sub">
-        Serviços, workers, bancos e integrações externas por produto, num mapa de ecossistema
-        navegável.
-      </p>
-      <div className="row" style={{ marginBottom: '1rem' }}>
-        {PRODUCTS.map((p) => (
-          <button
-            key={p}
-            type="button"
-            className={`btn ${product === p ? 'btn-primary' : ''}`}
-            onClick={() => setProduct(p)}
-          >
-            {p}
-          </button>
+    <div className="live-map-page">
+      <header className="live-map-page-head">
+        <div>
+          <span className="live-map-eyebrow">Mapa vivo da operação</span>
+          <h1 className="page-title">Ecossistema de produtos</h1>
+          <p className="page-sub">Custos, dependências e contexto técnico em uma única visão navegável.</p>
+        </div>
+        <label className="live-map-product-select">
+          <span>Produto observado</span>
+          <select value={product} onChange={(event) => changeProduct(event.target.value)}>
+            {PRODUCTS.map((productName) => (
+              <option key={productName} value={productName}>{productName}</option>
+            ))}
+          </select>
+        </label>
+      </header>
+
+      <div className="live-map-legend" aria-label="Legenda de componentes">
+        {Object.entries({ frontend: 'Frontend', api: 'API', worker: 'Worker', resource: 'Cloud resource', external: 'External' }).map(([kind, label]) => (
+          <span key={kind}><i className={`legend-${kind}`} />{label}</span>
         ))}
       </div>
-      {error && <p className="error">{error}</p>}
-      <div className="row" style={{ marginBottom: '0.75rem' }}>
-        {[
-          ['frontend', '#3b82f6'],
-          ['api', '#22c55e'],
-          ['worker', '#f59e0b'],
-          ['resource', '#64748b'],
-          ['external', '#a855f7'],
-        ].map(([k, c]) => (
-          <span key={k} className="badge">
-            <span className="legend-dot" style={{ background: c }} />
-            {k}
-          </span>
-        ))}
-      </div>
-      {eco && <EcosystemMap data={eco} />}
+
+      {error && <div className="live-map-error" role="alert">Não foi possível carregar o mapa: {error}</div>}
+      {!error && !ecosystem && <div className="live-map-loading">Sincronizando o ecossistema de {product}…</div>}
+      {ecosystem && <EcosystemMap key={ecosystem.product} data={ecosystem} />}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, ReactNode, useEffect, useState } from 'react'
-import { api, getApiKey, setApiKey } from '@/lib/api'
+import { api, clearApiKey, getApiKey, setApiKey } from '@/lib/api'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
@@ -31,20 +31,35 @@ export function ApiKeyGate({ children }: { children: ReactNode }) {
   const [checking, setChecking] = useState(false)
 
   useEffect(() => {
-    api
-      .authMode()
-      .then((m) => {
-        setMode(m.mode)
-        setProviders(m.providers)
-      })
-      .catch(() => {
+    async function initialize() {
+      try {
+        const authMode = await api.authMode()
+        setMode(authMode.mode)
+        setProviders(authMode.providers)
+      } catch {
         // API unreachable — fall through to the local-mode form so the
         // error surfaces on submit instead of a blank screen.
-      })
-      .finally(() => {
-        setNeedsKey(!getApiKey())
+      }
+
+      const storedKey = getApiKey()
+      if (!storedKey) {
+        setNeedsKey(true)
         setReady(true)
-      })
+        return
+      }
+
+      try {
+        await api.health()
+        setNeedsKey(false)
+      } catch {
+        clearApiKey()
+        setNeedsKey(true)
+      } finally {
+        setReady(true)
+      }
+    }
+
+    void initialize()
   }, [])
 
   async function trySubmit(e: FormEvent) {
