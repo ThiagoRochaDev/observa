@@ -194,7 +194,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const searchResults = useMemo(() => {
     const query = normalizeSearch(searchQuery.trim())
-    if (!query) return []
+    if (!query) return SEARCH_ITEMS.slice(0, 7)
     return SEARCH_ITEMS.filter((item) => normalizeSearch(
       `${item.label} ${item.description} ${item.group} ${item.href}`,
     ).includes(query)).slice(0, 7)
@@ -365,9 +365,9 @@ export function Shell({ children }: { children: ReactNode }) {
                 ref={searchInputRef}
                 type="search"
                 value={searchQuery}
-                placeholder="Qual tela você deseja abrir?"
-                aria-label="Buscar uma tela"
-                aria-expanded={searchOpen && Boolean(searchQuery.trim())}
+                placeholder="Qual serviço você deseja acessar?"
+                aria-label="Buscar serviço"
+                aria-expanded={searchOpen}
                 aria-controls="global-search-results"
                 aria-activedescendant={searchResults[searchIndex] ? `global-search-option-${searchIndex}` : undefined}
                 onChange={(event) => {
@@ -380,9 +380,9 @@ export function Shell({ children }: { children: ReactNode }) {
               />
               <kbd>⌘ K</kbd>
             </label>
-            {searchOpen && Boolean(searchQuery.trim()) && (
-              <div className="global-search-results" id="global-search-results" role="listbox" aria-label="Telas encontradas">
-                <div className="global-search-results-title">Ir para</div>
+            {searchOpen && (
+              <div className="global-search-results" id="global-search-results" role="listbox" aria-label="Serviços disponíveis">
+                <div className="global-search-results-title">{searchQuery.trim() ? 'Serviços encontrados' : 'Acesso rápido'}</div>
                 {searchResults.map((item, index) => (
                   <button
                     id={`global-search-option-${index}`}
@@ -404,7 +404,7 @@ export function Shell({ children }: { children: ReactNode }) {
                   </button>
                 ))}
                 {searchResults.length === 0 && (
-                  <div className="global-search-empty">Nenhuma tela encontrada para “{searchQuery.trim()}”.</div>
+                  <div className="global-search-empty">Nenhum serviço encontrado para “{searchQuery.trim()}”.</div>
                 )}
                 {searchResults.length > 0 && (
                   <div className="global-search-help"><span>↑↓ navegar</span><span>↵ abrir</span><span>Esc fechar</span></div>

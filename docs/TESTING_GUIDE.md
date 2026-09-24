@@ -2075,16 +2075,17 @@ npm run lint -- --quiet
 
 Esperado: os dois comandos terminam sem erros.
 
-### UI-006 — Busca global de telas
+### UI-006 — Busca global de serviços
 
-1. Clique no campo **Qual tela você deseja abrir?** no header.
-2. Digite `custos`, `logs`, `conexões` e `segurança` separadamente.
-3. Use `↑` e `↓` para alternar a opção destacada e `Enter` para abrir.
-4. Use `Esc` para fechar os resultados.
-5. Pressione `Ctrl+K` no Windows/Linux ou `⌘K` no macOS e confirme que o campo recebe foco.
+1. Clique no campo **Qual serviço você deseja acessar?** no header.
+2. Sem digitar, confira as opções de acesso rápido.
+3. Digite `custos`, `logs`, `conexões` e `segurança` separadamente.
+4. Use `↑` e `↓` para alternar a opção destacada e `Enter` para acessar o serviço.
+5. Use `Esc` para fechar os resultados.
+6. Pressione `Ctrl+K` no Windows/Linux ou `⌘K` no macOS e confirme que o campo recebe foco.
 
-Esperado: a busca apresenta somente telas compatíveis, com nome, descrição e grupo; clique ou
-`Enter` navega para a rota escolhida sem recarregar toda a aplicação.
+Esperado: a busca oferece acesso rápido aos serviços do menu e, durante a digitação, apresenta
+somente opções compatíveis, com nome, descrição e grupo; clique ou `Enter` abre a rota escolhida.
 
 ## 27. Marketplace de conexões
 
