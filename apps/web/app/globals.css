@@ -4333,8 +4333,13 @@ textarea {
   font-size: 9px;
 }
 
-.global-search {
+.global-search-wrap {
+  position: relative;
   width: min(320px, 35vw);
+}
+
+.global-search {
+  width: 100%;
   height: 32px;
   display: flex;
   align-items: center;
@@ -4364,6 +4369,112 @@ textarea {
   background: #171d25;
   color: #7f8a98;
   font: 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.global-search-results {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 7px);
+  left: 0;
+  width: min(500px, calc(100vw - 32px));
+  overflow: hidden;
+  padding: 6px;
+  border: 1px solid #303b48;
+  border-radius: 9px;
+  background: #11171e;
+  box-shadow: 0 18px 48px #030609c7;
+}
+
+.global-search-results-title {
+  padding: 6px 8px 7px;
+  color: #667485;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.global-search-results > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6f7c8c;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.global-search-results > button:hover,
+.global-search-results > button.active {
+  background: #202832;
+  color: #9fb4cb;
+}
+
+.global-search-result-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #34404d;
+  border-radius: 6px;
+  background: #151c24;
+  color: #8fa5bc;
+}
+
+.global-search-result-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.global-search-result-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.global-search-result-copy strong {
+  color: #e5ebf1;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.global-search-result-copy small,
+.global-search-result-group {
+  overflow: hidden;
+  color: #738090;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-search-result-group {
+  max-width: 115px;
+  padding: 3px 5px;
+  border: 1px solid #303a46;
+  border-radius: 4px;
+}
+
+.global-search-empty {
+  padding: 18px 10px;
+  color: #7d8998;
+  font-size: 10px;
+  text-align: center;
+}
+
+.global-search-help {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+  padding: 7px 8px 3px;
+  border-top: 1px solid #252e39;
+  color: #647181;
+  font-size: 8px;
 }
 
 .ai-policy {
@@ -4609,7 +4720,7 @@ textarea {
     padding-inline: 12px;
   }
 
-  .global-search {
+  .global-search-wrap {
     display: none;
   }
 

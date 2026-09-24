@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useEffect, useState, type ReactNode } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { api, getCompanyId, getTenancyId, setTenantContext, type Company, type Tenancy } from '@/lib/api'
 
 const ICON_STROKE = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.75 } as const
@@ -163,6 +163,12 @@ const GROUPS: { title: string; links: NavLink[] }[] = [
   },
 ]
 
+const SEARCH_ITEMS = GROUPS.flatMap((group) => group.links.map((link) => ({ ...link, group: group.title })))
+
+function normalizeSearch(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
 function tenancyCode(tenancy?: Tenancy): 'PROD' | 'HML' | 'DEV' {
   const value = `${tenancy?.name || ''} ${tenancy?.slug || ''}`.toLowerCase()
   if (value.includes('prod')) return 'PROD'
@@ -172,6 +178,9 @@ function tenancyCode(tenancy?: Tenancy): 'PROD' | 'HML' | 'DEV' {
 
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const searchRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [companies, setCompanies] = useState<Company[]>([])
   const [tenancies, setTenancies] = useState<Tenancy[]>([])
   const [companyId, setCompanyId] = useState('')
@@ -179,6 +188,17 @@ export function Shell({ children }: { children: ReactNode }) {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [draftCompanyId, setDraftCompanyId] = useState('')
   const [draftTenancyId, setDraftTenancyId] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchIndex, setSearchIndex] = useState(0)
+
+  const searchResults = useMemo(() => {
+    const query = normalizeSearch(searchQuery.trim())
+    if (!query) return []
+    return SEARCH_ITEMS.filter((item) => normalizeSearch(
+      `${item.label} ${item.description} ${item.group} ${item.href}`,
+    ).includes(query)).slice(0, 7)
+  }, [searchQuery])
 
   useEffect(() => {
     Promise.all([api.companies(), api.tenancies()]).then(([companyRows, tenancyRows]) => {
@@ -206,6 +226,28 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('keydown', closeOnEscape)
   }, [switcherOpen])
 
+  useEffect(() => {
+    function handleGlobalSearch(event: globalThis.KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+        setSearchOpen(true)
+      }
+      if (event.key === 'Escape') setSearchOpen(false)
+    }
+
+    function closeSearch(event: MouseEvent) {
+      if (!searchRef.current?.contains(event.target as Node)) setSearchOpen(false)
+    }
+
+    document.addEventListener('keydown', handleGlobalSearch)
+    document.addEventListener('mousedown', closeSearch)
+    return () => {
+      document.removeEventListener('keydown', handleGlobalSearch)
+      document.removeEventListener('mousedown', closeSearch)
+    }
+  }, [])
+
   const activeCompany = companies.find((row) => row.id === companyId)
   const activeTenancy = tenancies.find((row) => row.id === tenancyId)
   const activeCode = tenancyCode(activeTenancy)
@@ -232,6 +274,29 @@ export function Shell({ children }: { children: ReactNode }) {
     setTenantContext(draftCompanyId, draftTenancyId)
     setSwitcherOpen(false)
     window.location.reload()
+  }
+
+  function goToSearchResult(item: typeof SEARCH_ITEMS[number]) {
+    setSearchOpen(false)
+    setSearchQuery('')
+    router.push(item.href)
+  }
+
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setSearchOpen(true)
+      setSearchIndex((current) => Math.min(current + 1, Math.max(searchResults.length - 1, 0)))
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setSearchIndex((current) => Math.max(current - 1, 0))
+    } else if (event.key === 'Enter' && searchResults[searchIndex]) {
+      event.preventDefault()
+      goToSearchResult(searchResults[searchIndex])
+    } else if (event.key === 'Escape') {
+      setSearchOpen(false)
+      searchInputRef.current?.blur()
+    }
   }
 
   return (
@@ -293,11 +358,60 @@ export function Shell({ children }: { children: ReactNode }) {
             </span>
             <span aria-hidden="true">⌄</span>
           </button>
-          <label className="global-search">
-            <span aria-hidden="true">⌕</span>
-            <input type="search" placeholder="Buscar recursos, produtos, alertas…" aria-label="Busca global" />
-            <kbd>⌘ K</kbd>
-          </label>
+          <div className="global-search-wrap" ref={searchRef}>
+            <label className="global-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={searchQuery}
+                placeholder="Qual tela você deseja abrir?"
+                aria-label="Buscar uma tela"
+                aria-expanded={searchOpen && Boolean(searchQuery.trim())}
+                aria-controls="global-search-results"
+                aria-activedescendant={searchResults[searchIndex] ? `global-search-option-${searchIndex}` : undefined}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value)
+                  setSearchOpen(true)
+                  setSearchIndex(0)
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onKeyDown={handleSearchKeyDown}
+              />
+              <kbd>⌘ K</kbd>
+            </label>
+            {searchOpen && Boolean(searchQuery.trim()) && (
+              <div className="global-search-results" id="global-search-results" role="listbox" aria-label="Telas encontradas">
+                <div className="global-search-results-title">Ir para</div>
+                {searchResults.map((item, index) => (
+                  <button
+                    id={`global-search-option-${index}`}
+                    key={item.href}
+                    type="button"
+                    role="option"
+                    aria-selected={index === searchIndex}
+                    className={index === searchIndex ? 'active' : ''}
+                    onMouseEnter={() => setSearchIndex(index)}
+                    onClick={() => goToSearchResult(item)}
+                  >
+                    <span className="global-search-result-icon">{ICONS[item.icon]}</span>
+                    <span className="global-search-result-copy">
+                      <strong>{item.label}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                    <span className="global-search-result-group">{item.group}</span>
+                    <span aria-hidden="true">↵</span>
+                  </button>
+                ))}
+                {searchResults.length === 0 && (
+                  <div className="global-search-empty">Nenhuma tela encontrada para “{searchQuery.trim()}”.</div>
+                )}
+                {searchResults.length > 0 && (
+                  <div className="global-search-help"><span>↑↓ navegar</span><span>↵ abrir</span><span>Esc fechar</span></div>
+                )}
+              </div>
+            )}
+          </div>
           <div className="ai-policy"><span aria-hidden="true" /> IA externa desativada</div>
         </header>
         <main className="dash-content">{children}</main>

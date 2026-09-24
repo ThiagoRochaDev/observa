@@ -2075,6 +2075,17 @@ npm run lint -- --quiet
 
 Esperado: os dois comandos terminam sem erros.
 
+### UI-006 — Busca global de telas
+
+1. Clique no campo **Qual tela você deseja abrir?** no header.
+2. Digite `custos`, `logs`, `conexões` e `segurança` separadamente.
+3. Use `↑` e `↓` para alternar a opção destacada e `Enter` para abrir.
+4. Use `Esc` para fechar os resultados.
+5. Pressione `Ctrl+K` no Windows/Linux ou `⌘K` no macOS e confirme que o campo recebe foco.
+
+Esperado: a busca apresenta somente telas compatíveis, com nome, descrição e grupo; clique ou
+`Enter` navega para a rota escolhida sem recarregar toda a aplicação.
+
 ## 27. Marketplace de conexões
 
 ### CON-UI-001 — Catálogo, busca e categorias
