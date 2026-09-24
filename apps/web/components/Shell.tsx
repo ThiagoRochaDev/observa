@@ -120,41 +120,55 @@ const ICONS: Record<string, ReactNode> = {
   ),
 }
 
-const GROUPS = [
+type NavLink = { href: string; label: string; description: string; icon: string; badge?: string }
+
+const GROUPS: { title: string; links: NavLink[] }[] = [
   {
-    title: 'FinOps & Catalog',
+    title: 'Visão geral',
     links: [
-      { href: '/', label: 'Overview', description: 'Cost & health at a glance', icon: 'overview' },
-      { href: '/products', label: 'Products', description: 'Business catalog & spend', icon: 'products' },
-      { href: '/maps', label: 'Ecosystem maps', description: 'Service topology', icon: 'maps' },
-      { href: '/inventory', label: 'Inventory', description: 'Cloud resources', icon: 'inventory' },
-      { href: '/budgets', label: 'Budgets', description: 'Limits, forecast & actions', icon: 'budgets' },
-      { href: '/governance', label: 'Governance', description: 'Tags, schedules & approvals', icon: 'governance' },
+      { href: '/', label: 'Visão geral', description: 'Custos e saúde', icon: 'overview' },
     ],
   },
   {
-    title: 'Observability',
+    title: 'FinOps e catálogo',
+    links: [
+      { href: '/products', label: 'Produtos', description: 'Catálogo e custos', icon: 'products' },
+      { href: '/maps', label: 'Mapa do ecossistema', description: 'Topologia viva', icon: 'maps' },
+      { href: '/inventory', label: 'Inventário', description: 'Recursos conectados', icon: 'inventory', badge: '312' },
+      { href: '/budgets', label: 'Budgets', description: 'Limites e projeções', icon: 'budgets' },
+      { href: '/governance', label: 'Governança', description: 'Tags e aprovações', icon: 'governance' },
+    ],
+  },
+  {
+    title: 'Observabilidade',
     links: [
       { href: '/dashboards', label: 'Dashboards', description: 'Custom widget boards', icon: 'dashboards' },
-      { href: '/observability', label: 'APM & Infra', description: 'Latency, errors, DB', icon: 'observability' },
+      { href: '/observability', label: 'Aplicações e infra', description: 'Latência, erros e DB', icon: 'observability' },
       { href: '/logs', label: 'Logs', description: 'Search & filter events', icon: 'logs' },
       { href: '/traces', label: 'Traces', description: 'Distributed request flow', icon: 'traces' },
-      { href: '/monitors', label: 'Monitors', description: 'Alert rules & status', icon: 'monitors' },
-      { href: '/rum', label: 'RUM & Synthetics', description: 'Real users & uptime', icon: 'rum' },
-      { href: '/gcp', label: 'GCP Monitoring', description: 'Metrics & logging', icon: 'gcp' },
-      { href: '/alerts', label: 'Alerts', description: 'Open incidents', icon: 'alerts' },
-      { href: '/remediations', label: 'Remediations', description: 'Diagnose & approve fixes', icon: 'remediations' },
+      { href: '/monitors', label: 'Monitores', description: 'Regras e status', icon: 'monitors' },
+      { href: '/rum', label: 'RUM e sintéticos', description: 'Usuários e uptime', icon: 'rum' },
+      { href: '/gcp', label: 'GCP Monitoring', description: 'Métricas e logging', icon: 'gcp' },
+      { href: '/alerts', label: 'Alertas', description: 'Incidentes abertos', icon: 'alerts', badge: '23' },
+      { href: '/remediations', label: 'Remediações', description: 'Diagnóstico e correção', icon: 'remediations' },
     ],
   },
   {
-    title: 'Platform',
+    title: 'Plataforma',
     links: [
-      { href: '/settings/organizations', label: 'Organizations', description: 'Companies & tenancies', icon: 'organizations' },
-      { href: '/connections', label: 'Connections', description: 'Connectors & credentials', icon: 'connections' },
-      { href: '/settings/auth', label: 'Authentication', description: 'SSO & access', icon: 'auth' },
+      { href: '/connections', label: 'Conexões', description: 'Conectores e credenciais', icon: 'connections' },
+      { href: '/settings/organizations', label: 'Companies e tenancies', description: 'Isolamento organizacional', icon: 'organizations' },
+      { href: '/settings/auth', label: 'Segurança e acesso', description: 'SSO e autenticação', icon: 'auth' },
     ],
   },
-] as const
+]
+
+function tenancyCode(tenancy?: Tenancy): 'PROD' | 'HML' | 'DEV' {
+  const value = `${tenancy?.name || ''} ${tenancy?.slug || ''}`.toLowerCase()
+  if (value.includes('prod')) return 'PROD'
+  if (value.includes('hom') || value.includes('stag')) return 'HML'
+  return 'DEV'
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -162,6 +176,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const [tenancies, setTenancies] = useState<Tenancy[]>([])
   const [companyId, setCompanyId] = useState('')
   const [tenancyId, setTenancyId] = useState('')
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [draftCompanyId, setDraftCompanyId] = useState('')
+  const [draftTenancyId, setDraftTenancyId] = useState('')
 
   useEffect(() => {
     Promise.all([api.companies(), api.tenancies()]).then(([companyRows, tenancyRows]) => {
@@ -180,51 +197,63 @@ export function Shell({ children }: { children: ReactNode }) {
     }).catch(() => undefined)
   }, [])
 
-  function selectCompany(nextCompanyId: string) {
-    const firstTenancy = tenancies.find((row) => row.company_id === nextCompanyId)
-    setCompanyId(nextCompanyId)
-    setTenancyId(firstTenancy?.id || '')
-    if (firstTenancy) {
-      setTenantContext(nextCompanyId, firstTenancy.id)
-      window.location.reload()
+  useEffect(() => {
+    if (!switcherOpen) return
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSwitcherOpen(false)
     }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [switcherOpen])
+
+  const activeCompany = companies.find((row) => row.id === companyId)
+  const activeTenancy = tenancies.find((row) => row.id === tenancyId)
+  const activeCode = tenancyCode(activeTenancy)
+  const draftCompany = companies.find((row) => row.id === draftCompanyId)
+  const draftTenancy = tenancies.find((row) => row.id === draftTenancyId)
+  const draftCode = tenancyCode(draftTenancy)
+
+  function openSwitcher() {
+    setDraftCompanyId(companyId)
+    setDraftTenancyId(tenancyId)
+    setSwitcherOpen(true)
   }
 
-  function selectTenancy(nextTenancyId: string) {
-    setTenancyId(nextTenancyId)
-    setTenantContext(companyId, nextTenancyId)
+  function selectDraftCompany(nextCompanyId: string) {
+    const firstTenancy = tenancies.find((row) => row.company_id === nextCompanyId)
+    setDraftCompanyId(nextCompanyId)
+    setDraftTenancyId(firstTenancy?.id || '')
+  }
+
+  function applyContext() {
+    if (!draftCompanyId || !draftTenancyId) return
+    setCompanyId(draftCompanyId)
+    setTenancyId(draftTenancyId)
+    setTenantContext(draftCompanyId, draftTenancyId)
+    setSwitcherOpen(false)
     window.location.reload()
   }
 
   return (
-    <div className="dash-layout">
+    <div className={`dash-layout env-${activeCode.toLowerCase()}`}>
+      <div className="context-bar">
+        <span className="context-dot" aria-hidden="true" />
+        <strong>{activeCode}</strong>
+        <span>{activeCompany?.name || 'Company'} / {activeTenancy?.name || 'Tenancy'}</span>
+        <span className="context-warning">
+          {activeCode === 'PROD' ? 'Ações aprovadas aqui afetam recursos reais.' : 'Contexto isolado e protegido.'}
+        </span>
+      </div>
       <aside className="dash-sidebar">
         <Link href="/" className="dash-brand">
-          <div className="dash-brand-mark">O</div>
+          <div className="dash-brand-mark"><span /></div>
           <div>
             <div className="dash-brand-title">Observa</div>
-            <div className="dash-brand-sub">connect · catalog · observe</div>
+            <div className="dash-brand-sub">FinOps · Observabilidade · Governança</div>
           </div>
         </Link>
 
-        <div className="tenant-switcher">
-          <label>
-            Company
-            <select value={companyId} onChange={(event) => selectCompany(event.target.value)}>
-              {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-            </select>
-          </label>
-          <label>
-            Tenancy
-            <select value={tenancyId} onChange={(event) => selectTenancy(event.target.value)}>
-              {tenancies.filter((row) => row.company_id === companyId).map((tenancy) => (
-                <option key={tenancy.id} value={tenancy.id}>{tenancy.name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <nav className="dash-nav" aria-label="Main navigation">
+        <nav className="dash-nav" aria-label="Navegação principal">
           {GROUPS.map((g) => (
             <div key={g.title}>
               <span className="dash-nav-section">{g.title}</span>
@@ -242,6 +271,7 @@ export function Shell({ children }: { children: ReactNode }) {
                       <span className="dash-nav-label">{l.label}</span>
                       <span className="dash-nav-desc">{l.description}</span>
                     </span>
+                    {l.badge && <span className="dash-nav-badge">{l.badge}</span>}
                   </Link>
                 )
               })}
@@ -250,13 +280,85 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="dash-sidebar-foot">
-          <span>TGR Technology</span>
-          <span className="dash-foot-muted">Open source · Apache-2.0</span>
+          <span className="dash-user-avatar">TR</span>
+          <span className="dash-user-copy"><strong>Thiago Rocha</strong><small>Admin · Approver</small></span>
         </div>
       </aside>
       <div className="dash-main">
+        <header className="dash-header">
+          <button type="button" className="context-trigger" onClick={openSwitcher}>
+            <span className="context-code">{activeCode}</span>
+            <span className="context-trigger-copy">
+              <strong>{activeCompany?.name || 'Company'} / {activeTenancy?.name || 'Tenancy'}</strong>
+              <small>Trocar contexto</small>
+            </span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+          <label className="global-search">
+            <span aria-hidden="true">⌕</span>
+            <input type="search" placeholder="Buscar recursos, produtos, alertas…" aria-label="Busca global" />
+            <kbd>⌘ K</kbd>
+          </label>
+          <div className="ai-policy"><span aria-hidden="true" /> IA externa desativada</div>
+        </header>
         <main className="dash-content">{children}</main>
       </div>
+
+      {switcherOpen && (
+        <div className="context-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSwitcherOpen(false)
+        }}>
+          <section className="context-modal" role="dialog" aria-modal="true" aria-labelledby="context-modal-title">
+            <div className="context-modal-head">
+              <div>
+                <span className="eyebrow">Contexto de trabalho</span>
+                <h2 id="context-modal-title">Trocar company e tenancy</h2>
+              </div>
+              <button type="button" onClick={() => setSwitcherOpen(false)} aria-label="Fechar">×</button>
+            </div>
+            <p>Os dados de cada company e tenancy são isolados. Filtros e seleções não são carregados entre contextos.</p>
+            <div className="context-company-list">
+              {companies.map((company) => (
+                <button
+                  key={company.id}
+                  type="button"
+                  className={draftCompanyId === company.id ? 'selected' : ''}
+                  onClick={() => selectDraftCompany(company.id)}
+                >
+                  <span className="company-mark">{company.name.slice(0, 2).toUpperCase()}</span>
+                  <span><strong>{company.name}</strong><small>{company.slug}</small></span>
+                </button>
+              ))}
+            </div>
+            <div className="context-tenancy-grid">
+              {tenancies.filter((row) => row.company_id === draftCompanyId).map((tenancy) => {
+                const code = tenancyCode(tenancy)
+                return (
+                  <button
+                    key={tenancy.id}
+                    type="button"
+                    className={`tenancy-option env-${code.toLowerCase()} ${draftTenancyId === tenancy.id ? 'selected' : ''}`}
+                    onClick={() => setDraftTenancyId(tenancy.id)}
+                  >
+                    <span>{code}</span><strong>{tenancy.name}</strong>
+                  </button>
+                )
+              })}
+            </div>
+            {draftCode === 'PROD' && draftTenancyId !== tenancyId && (
+              <div className="context-production-warning">
+                Você está entrando em um ambiente de produção. Ações aprovadas afetam recursos reais.
+              </div>
+            )}
+            <div className="context-modal-actions">
+              <button type="button" className="button secondary" onClick={() => setSwitcherOpen(false)}>Cancelar</button>
+              <button type="button" className="button primary" onClick={applyContext} disabled={!draftTenancyId}>
+                Entrar em {draftCompany?.name || 'company'} / {draftTenancy?.name || 'tenancy'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }
