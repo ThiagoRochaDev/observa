@@ -249,7 +249,6 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="dash-brand-mark"><span /></div>
           <div>
             <div className="dash-brand-title">Observa</div>
-            <div className="dash-brand-sub">FinOps · Observabilidade · Governança</div>
           </div>
         </Link>
 
