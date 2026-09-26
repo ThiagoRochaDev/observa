@@ -85,13 +85,13 @@ companies and isolated production/sandbox/business-unit tenancies under
 
 **Connections** is the only screen you need to plug in a real cloud, tool, or on-premise system. It's a catalog: pick a tile, paste a credential, done.
 
-![Connections catalog](docs/screenshots/connections-catalog.jpg)
+![Connections catalog]()
 
 - Tools are grouped by category — **Cloud providers**, **Observability & APM**, **Incident management**, **Source control & CI/CD**, **On-premise & self-hosted**, **Billing & data SaaS** — each with a colored icon so you can scan the list visually.
 - Each tile shows what it collects (`cost`, `inventory`, `metrics`, …) as small badges.
 - Click a tile to open its credential form:
 
-![Datadog connection form](docs/screenshots/connection-form.jpg)
+![Datadog connection form](g)
 
 - The form fields are generated from the connector's schema — for Datadog that's an **API key** + **Application key**; for AWS it's an access key pair; for Kubernetes it's a ServiceAccount **bearer token**; for GitHub/GitLab it's a **personal access token (PAT)**. Whatever the tool calls its credential, that's the field you fill in.
 - **"Where to get credentials"** links straight to that provider's docs for generating the key/token.
@@ -101,7 +101,7 @@ companies and isolated production/sandbox/business-unit tenancies under
 
 ### 2. Overview
 
-![Overview](docs/screenshots/overview.jpg)
+![Overview]()
 
 Your FinOps front page once at least one connector has synced:
 
@@ -112,13 +112,13 @@ Your FinOps front page once at least one connector has synced:
 
 ### 3. Products
 
-![Products](docs/screenshots/products.jpg)
+![Products]()
 
 The **business** view of your stack — not servers, but the products/teams that own them. Each row is a product with its squad, tribe, 30-day cost, service count, and resource count. Click a product name to drill into its own cost breakdown, service list, and resource inventory.
 
 ### 4. Ecosystem maps
 
-![Ecosystem map](docs/screenshots/ecosystem-map.jpg)
+![Ecosystem map]()
 
 The **Mapa Vivo** is an interactive, pannable and zoomable graph (React Flow) of how a product's services communicate — frontends, APIs, workers, cloud resources and external dependencies, color-coded by kind. Switch products with the selector at the top, click a component to highlight its direct connections, and use the inspector to navigate upstream and downstream dependencies.
 
@@ -134,13 +134,13 @@ A flat, filterable table of every cloud resource discovered by your connectors �
 
 ### 6. Dashboards
 
-![Dashboards](docs/screenshots/dashboards.jpg)
+![Dashboards]()
 
 Prebuilt widget boards in the style of Datadog/Cloud Monitoring dashboards: Executive Overview, APM Services Health, GKE Infrastructure, Cloud SQL/Databases, Error Logs Pipeline, RUM Web Performance. Click any card to open the full board with its charts.
 
 ### 7. Alerts
 
-![Alerts](docs/screenshots/alerts.jpg)
+![Alerts]()
 
 A single, centralized alert inbox across every category — cost anomalies, APM errors, database health, infra saturation, and FinOps recommendations (e.g. "staging is 42% of production cost") — with severity, the product it's tied to, and status (`open` / `acknowledged` / `pending`).
 
