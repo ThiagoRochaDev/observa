@@ -235,7 +235,7 @@ Teste do payload:
 
 ```powershell
 $ecosystem = Invoke-RestMethod `
-  "http://localhost:8080/api/ecosystem?product=hiperlocal" `
+  "http://localhost:8080/api/ecosystem?product=easy-food" `
   -Headers $headers
 
 $ecosystem.product

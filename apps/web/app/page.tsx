@@ -42,8 +42,8 @@ export default function HomePage() {
   return (
     <div>
       <div className="demo-banner">
-        Dataset completo simulado (GCP / AWS / Datadog / GitLab + APM + Cloud SQL). Isto é o visual
-        alvo com tudo conectado — troque o Mock Demo por conectores reais na UI.
+        Mock Demo: produtos TGR com dados fictícios. Custos, serviços, métricas e alertas de
+        exemplo não representam ambientes reais.
       </div>
       <h1 className="page-title">Visão geral FinOps</h1>
       <p className="page-sub">

@@ -171,7 +171,7 @@ Esperado: os cards e gráficos devem estar preenchidos pelo `mock-demo`.
 Rota: `/products`
 
 1. Confira nome, squad, tribe, custo, serviços e recursos.
-2. Abra um produto, por exemplo `hiperlocal`.
+2. Abra um produto, por exemplo `easy-food`.
 3. Valide custos por provider e serviço.
 4. Confira inventário e métricas vinculadas ao produto.
 
@@ -179,7 +179,7 @@ API equivalente:
 
 ```powershell
 Invoke-RestMethod "$baseUrl/api/products" -Headers $headers
-Invoke-RestMethod "$baseUrl/api/products/hiperlocal" -Headers $headers
+Invoke-RestMethod "$baseUrl/api/products/easy-food" -Headers $headers
 ```
 
 ### 6.3 Ecosystem maps
@@ -194,7 +194,7 @@ Rota: `/maps`
 API equivalente:
 
 ```powershell
-Invoke-RestMethod "$baseUrl/api/ecosystem?product=hiperlocal" -Headers $headers
+Invoke-RestMethod "$baseUrl/api/ecosystem?product=easy-food" -Headers $headers
 ```
 
 ### 6.4 Inventory
@@ -251,7 +251,7 @@ Esperado: a política aparece em **Políticas ativas** com badge `dry-run`.
 
 Rota: `/budgets`
 
-1. Crie um budget para um produto existente, como `hiperlocal`.
+1. Crie um budget para um produto existente, como `easy-food`.
 2. Use um valor baixo em ambiente demo para atingir o limite.
 3. Selecione resposta `Solicitar desligamento`.
 4. Informe o owner e um UID de recurso do Inventory.
@@ -289,7 +289,7 @@ Valide por produto:
 
 ```powershell
 Invoke-RestMethod "$baseUrl/api/observability" -Headers $headers
-Invoke-RestMethod "$baseUrl/api/metrics/series?name=apm.latency_p95_ms&product=hiperlocal" -Headers $headers
+Invoke-RestMethod "$baseUrl/api/metrics/series?name=apm.latency_p95_ms&product=easy-food" -Headers $headers
 ```
 
 ### 6.8 Logs
@@ -303,7 +303,7 @@ Rota: `/logs`
 5. Confirme que limpar filtros restaura a listagem.
 
 ```powershell
-Invoke-RestMethod "$baseUrl/api/logs?limit=20&product=hiperlocal&severity=error" -Headers $headers
+Invoke-RestMethod "$baseUrl/api/logs?limit=20&product=easy-food&severity=error" -Headers $headers
 Invoke-RestMethod "$baseUrl/api/logs?q=timeout" -Headers $headers
 ```
 
@@ -605,16 +605,16 @@ Crie uma política com `expires_at` no passado e execute `run-due`. A ação con
 
 ```powershell
 $budgetBody = @{
-  name = "Budget hiperlocal"
+  name = "Budget easy-food"
   scope_type = "product"
-  scope_value = "hiperlocal"
+  scope_value = "easy-food"
   amount = 100
   currency = "BRL"
   window_days = 30
   warning_threshold = 0.8
   critical_threshold = 1.0
   response_mode = "approval"
-  owner = "squad-hiperlocal"
+  owner = "squad-easy-food"
   resource_ids = @($resource.uid)
   dry_run = $true
   enabled = $true
@@ -666,7 +666,7 @@ observa --help
 ```powershell
 observa resources
 observa resources --untagged
-observa resources --product hiperlocal
+observa resources --product easy-food
 observa --json resources --untagged
 ```
 
@@ -722,10 +722,10 @@ observa actions reject act_ID --reason "Ambiente ainda necessário"
 ### Budgets
 
 ```powershell
-observa budgets create "Budget hiperlocal" `
-  --scope product --value hiperlocal --amount 5000 `
+observa budgets create "Budget easy-food" `
+  --scope product --value easy-food --amount 5000 `
   --warning 80 --critical 100 --response approval `
-  --owner squad-hiperlocal --resource 12
+  --owner squad-easy-food --resource 12
 observa budgets list
 observa budgets evaluate
 observa budgets monitor
@@ -1107,8 +1107,8 @@ $apiKey = (Get-Content .\data\api_key -Raw).Trim()
 $headers = @{ "X-Observa-Api-Key" = $apiKey }
 Invoke-RestMethod "$baseUrl/api/demo/seed" -Method Post -Headers $headers
 $resources = Invoke-RestMethod "$baseUrl/api/resources" -Headers $headers
-$hiperlocalResource = $resources | Where-Object product -eq "hiperlocal" | Select-Object -First 1
-$hiperlocal = Invoke-RestMethod "$baseUrl/api/products/hiperlocal" -Headers $headers
+$easyFoodResource = $resources | Where-Object product -eq "easy-food" | Select-Object -First 1
+$easyFood = Invoke-RestMethod "$baseUrl/api/products/easy-food" -Headers $headers
 ```
 
 Se estiver usando Docker, preencha `$apiKey` manualmente com a chave exibida nos logs.
@@ -1192,7 +1192,7 @@ function New-ObservaBudget {
 
 ```powershell
 $rule = New-ObservaBudget -Name "Defaults" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 999999
+  -ScopeValue easy-food -Amount 999999
 $rule | ConvertTo-Json -Depth 5
 ```
 
@@ -1209,7 +1209,7 @@ Esperado:
 
 ```powershell
 $rule = New-ObservaBudget -Name "Normal" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 999999
+  -ScopeValue easy-food -Amount 999999
 $result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
 $result.rules | Where-Object rule_id -eq $rule.id
@@ -1222,10 +1222,10 @@ Esperado: nível `normal`, `usage_pct` menor que `0.8` e nenhum evento novo para
 Use o custo atual para posicionar o consumo em aproximadamente 90%:
 
 ```powershell
-$amount = $hiperlocal.total_brl / 0.9
+$amount = $easyFood.total_brl / 0.9
 $rule = New-ObservaBudget -Name "Forecast preventivo" -ScopeType product `
-  -ScopeValue hiperlocal -Amount $amount -ResponseMode approval `
-  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+  -ScopeValue easy-food -Amount $amount -ResponseMode approval `
+  -Owner "squad-easy-food" -ResourceIds @($easyFoodResource.uid)
 $result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" `
   -Body '{"at":"2026-09-21"}'
@@ -1244,7 +1244,7 @@ Esperado:
 
 ```powershell
 $rule = New-ObservaBudget -Name "Critical" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 1
+  -ScopeValue easy-food -Amount 1
 $result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" `
   -Body '{"at":"2026-09-22"}'
@@ -1256,13 +1256,13 @@ Esperado: nível `critical`, `usage_pct >= 1` e alerta de severidade alta.
 ### BUD-005 — Budget por produto
 
 ```powershell
-$rule = New-ObservaBudget -Name "Produto hiperlocal" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 5000
+$rule = New-ObservaBudget -Name "Produto easy-food" -ScopeType product `
+  -ScopeValue easy-food -Amount 5000
 Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
 ```
 
-Compare `actual_cost` com `total_brl` retornado por `/api/products/hiperlocal`. Pequenas diferenças
+Compare `actual_cost` com `total_brl` retornado por `/api/products/easy-food`. Pequenas diferenças
 só são aceitáveis se as janelas consultadas forem diferentes.
 
 ### BUD-006 — Budget por cloud/provider
@@ -1344,7 +1344,7 @@ Esperado:
 
 ```powershell
 $rule = New-ObservaBudget -Name "Somente notificar" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 1 -ResponseMode notify
+  -ScopeValue easy-food -Amount 1 -ResponseMode notify
 Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" `
   -Body '{"at":"2026-09-23"}'
@@ -1356,8 +1356,8 @@ Esperado: evento `notified`, alerta criado e nenhuma action ID.
 
 ```powershell
 $rule = New-ObservaBudget -Name "Aprovação preventiva" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 1 -ResponseMode approval `
-  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+  -ScopeValue easy-food -Amount 1 -ResponseMode approval `
+  -Owner "squad-easy-food" -ResourceIds @($easyFoodResource.uid)
 $result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" `
   -Body '{"at":"2026-09-24"}'
@@ -1384,7 +1384,7 @@ Esperado: status `ignored`, sem action IDs e sem alerta novo, mas com evento his
 ```powershell
 try {
   New-ObservaBudget -Name "Sem owner" -ScopeType product `
-    -ScopeValue hiperlocal -Amount 100 -ResponseMode approval
+    -ScopeValue easy-food -Amount 100 -ResponseMode approval
 } catch {
   $_.Exception.Response.StatusCode.value__
 }
@@ -1411,8 +1411,8 @@ Esperado: status `needs_mapping`, sem desligamento e alerta indicando necessidad
 
 ```powershell
 $rule = New-ObservaBudget -Name "Aprovação dry-run" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 1 -ResponseMode approval `
-  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+  -ScopeValue easy-food -Amount 1 -ResponseMode approval `
+  -Owner "squad-easy-food" -ResourceIds @($easyFoodResource.uid)
 $result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" `
   -Body '{"at":"2026-09-28"}'
@@ -1429,8 +1429,8 @@ Esperado: status `simulated`; o status real do recurso não deve mudar.
 
 ```powershell
 $rule = New-ObservaBudget -Name "Rejeição justificada" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 1 -ResponseMode approval `
-  -Owner "squad-hiperlocal" -ResourceIds @($hiperlocalResource.uid)
+  -ScopeValue easy-food -Amount 1 -ResponseMode approval `
+  -Owner "squad-easy-food" -ResourceIds @($easyFoodResource.uid)
 $result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" `
   -Body '{"at":"2026-09-29"}'
@@ -1505,9 +1505,9 @@ Crie duas regras idênticas, alterando apenas `window_days`:
 
 ```powershell
 $seven = New-ObservaBudget -Name "Janela 7d" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 5000 -WindowDays 7
+  -ScopeValue easy-food -Amount 5000 -WindowDays 7
 $thirty = New-ObservaBudget -Name "Janela 30d" -ScopeType product `
-  -ScopeValue hiperlocal -Amount 5000 -WindowDays 30
+  -ScopeValue easy-food -Amount 5000 -WindowDays 30
 $result = Invoke-RestMethod "$baseUrl/api/budgets/evaluate" `
   -Method Post -Headers $headers -ContentType "application/json" -Body "{}"
 ```
@@ -1539,9 +1539,9 @@ observa --json budgets events
 Para aprovação:
 
 ```powershell
-observa budgets create "CLI approval" --scope product --value hiperlocal `
-  --amount 100 --response approval --owner squad-hiperlocal `
-  --resource $($hiperlocalResource.uid)
+observa budgets create "CLI approval" --scope product --value easy-food `
+  --amount 100 --response approval --owner squad-easy-food `
+  --resource $($easyFoodResource.uid)
 observa budgets monitor
 observa actions list --status pending_approval
 ```
@@ -1906,7 +1906,7 @@ Arquitetura, contrato da API, controles de privacidade e troubleshooting detalha
 ### MAP-001 — Carregamento da topologia
 
 1. Acesse `http://localhost:3000/maps`.
-2. Selecione o produto `hiperlocal`.
+2. Selecione o produto `easy-food`.
 3. Confira os contadores de componentes, conexões e integrações externas.
 4. Use zoom, redução e ajuste automático do mapa.
 
@@ -1924,7 +1924,7 @@ atualizado sem nova requisição ou mistura de tenancy.
 
 ### MAP-003 — Troca de produto
 
-1. Troque `hiperlocal` por `platform` no seletor.
+1. Troque `easy-food` por `platform` no seletor.
 2. Aguarde a sincronização.
 3. Repita a inspeção de nós.
 
@@ -1965,7 +1965,7 @@ liberada após `/api/health` validar a nova chave.
 $apiKey = (Get-Content .\data\api_key -Raw).Trim()
 $headers = @{ "X-Observa-Api-Key" = $apiKey }
 $ecosystem = Invoke-RestMethod `
-  "http://localhost:8080/api/ecosystem?product=hiperlocal" `
+  "http://localhost:8080/api/ecosystem?product=easy-food" `
   -Headers $headers
 
 $nodeIds = @($ecosystem.nodes | ForEach-Object { $_.id })

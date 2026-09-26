@@ -7,6 +7,7 @@ from html import escape
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
+from demo_media_guard import verify_demo_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +39,7 @@ def title_frame(page: Page, filename: str, eyebrow: str, title: str, body: str) 
 
 
 def capture_page(page: Page, filename: str, path: str) -> None:
+    verify_demo_source(BASE_URL, os.getenv("OBSERVA_API_URL", "http://127.0.0.1:8080"), os.environ["OBSERVA_DEMO_API_KEY"])
     page.goto(f"{BASE_URL}{path}", wait_until="networkidle")
     page.wait_for_timeout(900)
     page.screenshot(path=FRAMES / filename)
@@ -86,7 +88,7 @@ def mobile_frame(page: Page) -> None:
         .btn{display:inline-block;background:#59d9b5;color:#07110e;border-radius:8px;padding:9px 12px;font-weight:800;margin:10px 5px 0 0}
         .danger{background:transparent;color:#f87171;border:1px solid #f87171}
         </style></head><body><div class="phone"><div class="brand">Observa</div><div class="sub">Custos, recursos e aprovações</div>
-        <div class="ctx">Example Corp · Produção</div><div class="metrics"><div class="card metric"><div class="val">R$ 15.523</div>
+        <div class="ctx">TGR Demo · Dados fictícios</div><div class="metrics"><div class="card metric"><div class="val">R$ 15.523</div>
         <div class="label">Custo 30 dias</div></div><div class="card metric"><div class="val">6</div><div class="label">Alertas</div></div></div>
         <h2>Aprovações pendentes</h2><div class="card"><b>Governança approval-first</b><div class="label">0 ações aguardando decisão</div></div>
         <h2>Remediações sugeridas</h2><div class="card"><b>Falha da aplicação · storefront/api</b><div class="label">Correção sugerida localmente,
@@ -97,6 +99,7 @@ def mobile_frame(page: Page) -> None:
 
 def main() -> None:
     api_key = os.environ["OBSERVA_DEMO_API_KEY"]
+    verify_demo_source(BASE_URL, os.getenv("OBSERVA_API_URL", "http://127.0.0.1:8080"), api_key)
     if not EDGE.exists():
         raise RuntimeError(f"Microsoft Edge not found at {EDGE}")
 
@@ -111,7 +114,7 @@ def main() -> None:
         title_frame(
             page,
             "001-title.png",
-            "Demonstração completa",
+            "Demonstração TGR — dados fictícios",
             "Observa",
             "Plataforma multiempresa para custos, recursos, budgets, logs, aprovações e remediação segura.",
         )

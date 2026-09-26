@@ -9,10 +9,10 @@ const EcosystemMap = dynamic(
   { ssr: false, loading: () => <div className="live-map-loading">Carregando topologia…</div> },
 )
 
-const PRODUCTS = ['hiperlocal', 'painel', 'gertrudes', 'delivery', 'platform']
+const PRODUCTS = ['easy-food', 'observa', 'detect-easy', 'move-easy', 'vr-archviz']
 
 export default function MapsPage() {
-  const [product, setProduct] = useState('hiperlocal')
+  const [product, setProduct] = useState('easy-food')
   const [ecosystem, setEcosystem] = useState<Ecosystem | null>(null)
   const [error, setError] = useState<string | null>(null)
 

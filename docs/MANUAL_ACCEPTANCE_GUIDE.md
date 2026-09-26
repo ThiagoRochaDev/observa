@@ -748,7 +748,7 @@ réplica enquanto o storage for SQLite.
 
 Para revisar rapidamente todas as áreas, abra:
 
-`docs/demo/observa-complete-walkthrough.mp4`
+`docs/DEMO_MEDIA_POLICY.md` (a gravação anterior foi retirada; valide apenas novas capturas revisadas com dados sintéticos TGR)
 
 Para regenerar com dados demo:
 

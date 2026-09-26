@@ -269,7 +269,7 @@ export const api = {
     req(`/api/remediations/${id}/feedback`, {
       method: 'POST', body: JSON.stringify({ outcome, notes }),
     }),
-  ecosystem: (product = 'hiperlocal') =>
+  ecosystem: (product = 'easy-food') =>
     req<Ecosystem>(`/api/ecosystem?product=${encodeURIComponent(product)}`),
   dashboards: () => req<DashboardMeta[]>('/api/dashboards'),
   dashboard: (id: string) => req<DashboardDetail>(`/api/dashboards/${encodeURIComponent(id)}`),

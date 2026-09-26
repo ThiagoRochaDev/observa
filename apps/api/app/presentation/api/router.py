@@ -591,7 +591,7 @@ def alerts(status: str | None = None):
 
 
 @router.get("/ecosystem")
-def ecosystem(product: str = "hiperlocal"):
+def ecosystem(product: str = "easy-food"):
     from app.application.demo_platform import ecosystem as eco
 
     return eco(product)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-PRODUCTS = ["painel", "hiperlocal", "gertrudes", "delivery", "platform"]
+PRODUCTS = ["observa", "easy-food", "detect-easy", "move-easy", "vr-archviz"]
 
 
 def _now() -> datetime:
@@ -26,14 +26,14 @@ def _series(hours: int = 24, base: float = 40, amp: float = 8) -> list[dict[str,
 def ecosystem(product: str) -> dict[str, Any]:
     """Service/resource graph for the ecosystem map view."""
     layouts: dict[str, dict[str, Any]] = {
-        "painel": {
+        "observa": {
             "nodes": [
-                {"id": "web", "label": "painel-web", "kind": "frontend", "tier": 0},
-                {"id": "bff", "label": "painel-bff", "kind": "api", "tier": 1},
-                {"id": "core", "label": "painel-core", "kind": "api", "tier": 1},
-                {"id": "queue", "label": "painel-queue", "kind": "worker", "tier": 2},
-                {"id": "sql", "label": "painel-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
-                {"id": "redis", "label": "painel-cache", "kind": "resource", "tier": 3, "type": "redis"},
+                {"id": "web", "label": "observa-web", "kind": "frontend", "tier": 0},
+                {"id": "bff", "label": "observa-bff", "kind": "api", "tier": 1},
+                {"id": "core", "label": "observa-core", "kind": "api", "tier": 1},
+                {"id": "queue", "label": "observa-queue", "kind": "worker", "tier": 2},
+                {"id": "sql", "label": "observa-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
+                {"id": "redis", "label": "observa-cache", "kind": "resource", "tier": 3, "type": "redis"},
                 {"id": "ext", "label": "identity-api", "kind": "external", "tier": 1},
             ],
             "edges": [
@@ -45,16 +45,16 @@ def ecosystem(product: str) -> dict[str, Any]:
                 {"source": "bff", "target": "ext", "label": "OIDC"},
             ],
         },
-        "hiperlocal": {
+        "easy-food": {
             "nodes": [
-                {"id": "fe", "label": "hiperlocal-frontend", "kind": "frontend", "tier": 0},
+                {"id": "fe", "label": "easy-food-frontend", "kind": "frontend", "tier": 0},
                 {"id": "checkout", "label": "checkout-api", "kind": "api", "tier": 1},
                 {"id": "catalog", "label": "catalog-api", "kind": "api", "tier": 1},
                 {"id": "search", "label": "search-api", "kind": "api", "tier": 1},
                 {"id": "order", "label": "order-api", "kind": "api", "tier": 2},
-                {"id": "sql", "label": "hiperlocal-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
-                {"id": "redis", "label": "hiperlocal-cache", "kind": "resource", "tier": 3, "type": "elasticache"},
-                {"id": "pay", "label": "gertrudes-api", "kind": "external", "tier": 2},
+                {"id": "sql", "label": "easy-food-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
+                {"id": "redis", "label": "easy-food-cache", "kind": "resource", "tier": 3, "type": "elasticache"},
+                {"id": "pay", "label": "detect-easy-api", "kind": "external", "tier": 2},
             ],
             "edges": [
                 {"source": "fe", "target": "checkout", "label": "HTTPS"},
@@ -67,12 +67,12 @@ def ecosystem(product: str) -> dict[str, Any]:
                 {"source": "order", "target": "sql", "label": "SQL"},
             ],
         },
-        "gertrudes": {
+        "detect-easy": {
             "nodes": [
-                {"id": "api", "label": "gertrudes-api", "kind": "api", "tier": 1},
+                {"id": "api", "label": "detect-easy-api", "kind": "api", "tier": 1},
                 {"id": "ledger", "label": "ledger-worker", "kind": "worker", "tier": 2},
                 {"id": "webhook", "label": "webhook-worker", "kind": "worker", "tier": 2},
-                {"id": "sql", "label": "gertrudes-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
+                {"id": "sql", "label": "detect-easy-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
                 {"id": "spanner", "label": "payments-spanner", "kind": "resource", "tier": 3, "type": "spanner"},
                 {"id": "psp", "label": "acquirer-psp", "kind": "external", "tier": 1},
             ],
@@ -84,13 +84,13 @@ def ecosystem(product: str) -> dict[str, Any]:
                 {"source": "api", "target": "psp", "label": "HTTPS"},
             ],
         },
-        "delivery": {
+        "move-easy": {
             "nodes": [
-                {"id": "fe", "label": "delivery-app", "kind": "frontend", "tier": 0},
-                {"id": "api", "label": "delivery-api", "kind": "api", "tier": 1},
+                {"id": "fe", "label": "move-easy-app", "kind": "frontend", "tier": 0},
+                {"id": "api", "label": "move-easy-api", "kind": "api", "tier": 1},
                 {"id": "routing", "label": "routing-api", "kind": "api", "tier": 1},
                 {"id": "dispatch", "label": "dispatch-worker", "kind": "worker", "tier": 2},
-                {"id": "sql", "label": "delivery-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
+                {"id": "sql", "label": "move-easy-primary", "kind": "resource", "tier": 3, "type": "cloudsql"},
                 {"id": "maps", "label": "maps-provider", "kind": "external", "tier": 1},
             ],
             "edges": [
@@ -102,9 +102,9 @@ def ecosystem(product: str) -> dict[str, Any]:
                 {"source": "dispatch", "target": "sql", "label": "SQL"},
             ],
         },
-        "platform": {
+        "vr-archviz": {
             "nodes": [
-                {"id": "portal", "label": "platform-portal", "kind": "frontend", "tier": 0},
+                {"id": "portal", "label": "vr-archviz-portal", "kind": "frontend", "tier": 0},
                 {"id": "gateway", "label": "api-gateway", "kind": "api", "tier": 1},
                 {"id": "auth", "label": "auth-service", "kind": "api", "tier": 1},
                 {"id": "ci", "label": "ci-runner", "kind": "worker", "tier": 2},
@@ -213,9 +213,9 @@ def dashboard_detail(dash_id: str) -> dict[str, Any]:
             "items": [
                 {"name": "checkout-api", "value": 4210},
                 {"name": "catalog-api", "value": 3880},
-                {"name": "painel-core", "value": 2910},
+                {"name": "observa-core", "value": 2910},
                 {"name": "search-api", "value": 2440},
-                {"name": "gertrudes-api", "value": 1810},
+                {"name": "detect-easy-api", "value": 1810},
             ],
         },
         {
@@ -225,8 +225,8 @@ def dashboard_detail(dash_id: str) -> dict[str, Any]:
             "items": [
                 {"name": "checkout-api", "value": 42},
                 {"name": "search-api", "value": 18},
-                {"name": "painel-bff", "value": 11},
-                {"name": "delivery-api", "value": 7},
+                {"name": "observa-bff", "value": 11},
+                {"name": "move-easy-api", "value": 7},
             ],
         },
     ]
@@ -244,9 +244,9 @@ def dashboard_detail(dash_id: str) -> dict[str, Any]:
                 "title": "Top DBs by connections",
                 "type": "toplist",
                 "items": [
-                    {"name": "hiperlocal-primary", "value": 148},
-                    {"name": "painel-primary", "value": 96},
-                    {"name": "gertrudes-primary", "value": 72},
+                    {"name": "easy-food-primary", "value": 148},
+                    {"name": "observa-primary", "value": 96},
+                    {"name": "detect-easy-primary", "value": 72},
                 ],
             },
         ]
@@ -263,7 +263,7 @@ def dashboard_detail(dash_id: str) -> dict[str, Any]:
                 "title": "Top views",
                 "type": "toplist",
                 "items": [
-                    {"name": "/painel/home", "value": 42000},
+                    {"name": "/observa/home", "value": 42000},
                     {"name": "/checkout", "value": 31000},
                     {"name": "/search", "value": 29000},
                 ],
@@ -280,8 +280,8 @@ def monitors() -> list[dict[str, Any]]:
             "name": "APM error rate > 2%",
             "type": "metric alert",
             "status": "Alert",
-            "product": "painel",
-            "query": "avg(last_5m):sum:trace.servlet.request.errors{product:painel} > 2",
+            "product": "observa",
+            "query": "avg(last_5m):sum:trace.servlet.request.errors{product:observa} > 2",
             "source": "datadog-like",
         },
         {
@@ -289,7 +289,7 @@ def monitors() -> list[dict[str, Any]]:
             "name": "Checkout P95 > 500ms",
             "type": "metric alert",
             "status": "Warn",
-            "product": "hiperlocal",
+            "product": "easy-food",
             "query": "avg(last_10m):p95:trace.express.request{service:checkout-api} > 500",
             "source": "datadog-like",
         },
@@ -298,7 +298,7 @@ def monitors() -> list[dict[str, Any]]:
             "name": "Cloud SQL connections > 75%",
             "type": "gcp monitoring",
             "status": "Alert",
-            "product": "hiperlocal",
+            "product": "easy-food",
             "query": "cloudsql.googleapis.com/database/network/connections > 150",
             "source": "gcp-monitoring",
         },
@@ -307,8 +307,8 @@ def monitors() -> list[dict[str, Any]]:
             "name": "Panic / FATAL logs",
             "type": "log alert",
             "status": "OK",
-            "product": "gertrudes",
-            "query": "severity>=ERROR service:gertrudes-api",
+            "product": "detect-easy",
+            "query": "severity>=ERROR service:detect-easy-api",
             "source": "cloud-logging",
         },
         {
@@ -316,7 +316,7 @@ def monitors() -> list[dict[str, Any]]:
             "name": "Daily cost anomaly",
             "type": "finops",
             "status": "Warn",
-            "product": "platform",
+            "product": "vr-archviz",
             "query": "cost_change_pct > 25 over 1d",
             "source": "observa",
         },
@@ -325,8 +325,8 @@ def monitors() -> list[dict[str, Any]]:
             "name": "RUM JS errors spike",
             "type": "rum alert",
             "status": "OK",
-            "product": "painel",
-            "query": "rum.error.count{view:painel} > 100",
+            "product": "observa",
+            "query": "rum.error.count{view:observa} > 100",
             "source": "datadog-like",
         },
     ]
@@ -476,7 +476,7 @@ def rum_summary() -> dict[str, Any]:
         "js_errors": 842,
         "crash_free_pct": 99.2,
         "top_views": [
-            {"view": "/painel/home", "sessions": 42000, "errors": 120},
+            {"view": "/observa/home", "sessions": 42000, "errors": 120},
             {"view": "/checkout", "sessions": 31000, "errors": 280},
             {"view": "/search", "sessions": 29000, "errors": 95},
         ],

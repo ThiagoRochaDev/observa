@@ -270,19 +270,19 @@ def test_resource_identity_survives_connector_sync(client):
 
 
 def test_budget_exceeded_creates_approval_action_and_deduplicates(client):
-    resource = next(row for row in client.get("/api/resources").json() if row["product"] == "hiperlocal")
+    resource = next(row for row in client.get("/api/resources").json() if row["product"] == "easy-food")
     created = client.post(
         "/api/budgets",
         json={
-            "name": "Hiperlocal guardrail",
+            "name": "Easy Food guardrail",
             "scope_type": "product",
-            "scope_value": "hiperlocal",
+            "scope_value": "easy-food",
             "amount": 1,
             "window_days": 30,
             "warning_threshold": 0.8,
             "critical_threshold": 1.0,
             "response_mode": "approval",
-            "owner": "squad-hiperlocal",
+            "owner": "squad-easy-food",
             "resource_ids": [resource["uid"]],
             "dry_run": True,
         },
@@ -332,7 +332,7 @@ def test_budget_approval_requires_owner(client):
         json={
             "name": "Invalid approval budget",
             "scope_type": "product",
-            "scope_value": "hiperlocal",
+            "scope_value": "easy-food",
             "amount": 100,
             "response_mode": "approval",
         },
@@ -341,20 +341,20 @@ def test_budget_approval_requires_owner(client):
 
 
 def test_budget_warning_starts_preventive_approval(client):
-    product = client.get("/api/products/hiperlocal").json()
+    product = client.get("/api/products/easy-food").json()
     resource = product["resources"][0]
     amount_for_ninety_percent = product["total_brl"] / 0.9
     created = client.post(
         "/api/budgets",
         json={
-            "name": "Preventive hiperlocal cap",
+            "name": "Preventive easy-food cap",
             "scope_type": "product",
-            "scope_value": "hiperlocal",
+            "scope_value": "easy-food",
             "amount": amount_for_ninety_percent,
             "warning_threshold": 0.8,
             "critical_threshold": 1.0,
             "response_mode": "approval",
-            "owner": "squad-hiperlocal",
+            "owner": "squad-easy-food",
             "resource_ids": [resource["uid"]],
         },
     )

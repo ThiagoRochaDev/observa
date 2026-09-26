@@ -48,7 +48,7 @@ export default function LogsPage() {
         </button>
         <select value={product} onChange={(e) => setProduct(e.target.value)}>
           <option value="">todos produtos</option>
-          {['painel', 'hiperlocal', 'gertrudes', 'delivery', 'platform'].map((p) => (
+          {['observa', 'easy-food', 'detect-easy', 'move-easy', 'vr-archviz'].map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
