@@ -6,7 +6,7 @@ Open-source platform to **connect clouds**, **catalog products**, and see **cost
 
 Observa is self-hosted / local-first and multi-cloud by design — bring your own credentials for any supported cloud, observability tool, or on-premise system, and Observa builds the cost + health view for you. No env files, no redeploys: every data source is added, tested, and synced from the **Connections** screen.
 
-![Observa — Overview](docs/screenshots/overview.jpg)
+![Observa — Overview]()
 
 ## Contents
 
@@ -128,7 +128,7 @@ The map request carries the active company and tenancy headers through the share
 
 ### 5. Inventory
 
-![Inventory](docs/screenshots/inventory.jpg)
+![Inventory])
 
 A flat, filterable table of every cloud resource discovered by your connectors — type, name, provider, region, status — grouped back to the product it belongs to. This is the "what do we actually have running" view, independent of cost.
 
