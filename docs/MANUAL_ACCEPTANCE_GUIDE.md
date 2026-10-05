@@ -831,7 +831,88 @@ de referência. Nenhuma credencial é necessária para a lista pública da OCI.
 
 Guia funcional e contratos: `docs/MULTICLOUD_MIGRATION.md`.
 
-## 28. Vídeo completo
+## 28. Vulnerabilidades cloud e on-premises
+
+### OBS-VULN-001 — Dados demo e painel
+
+1. Execute `POST /api/demo/seed` como operator.
+2. Abra **Vulnerabilidades**.
+3. Confira os cards de ativas, críticas, exploráveis e expostas.
+4. Filtre por `gcp`, `aws`, `on-prem` e `oci`.
+
+Resultado esperado: quatro findings explicitamente sintéticos aparecem ordenados pelo score. O
+finding crítico GCP está no topo; nenhum nome ou dado de cliente real aparece.
+
+### OBS-VULN-002 — Ingestão por API
+
+1. Crie `findings.json` seguindo `docs/VULNERABILITY_MANAGEMENT.md`.
+2. Execute `POST /api/vulnerabilities/ingest` com company/tenancy corretas.
+3. Envie novamente o mesmo finding.
+
+Resultado esperado: o endpoint exige operator, o fingerprint evita duplicação e `last_seen_at` é
+atualizado. Finding urgente cria um alerta de categoria `security`.
+
+### OBS-VULN-003 — Adapter cloud ou on-premises
+
+1. Em **Conexões**, configure um adapter Security Hub, SCC, Defender, Cloud Guard, Trivy, Grype ou
+   OpenVAS em ambiente de teste.
+2. Valide health e execute sync.
+3. Confira `last_sync_status`, contagem de vulnerabilidades e painel.
+
+Resultado esperado: somente o payload canônico entra na tenancy. Token permanece criptografado e
+não aparece em resposta, log, finding ou vídeo.
+
+### OBS-VULN-004 — Priorização e SLA
+
+1. Envie findings de severidade baixa, média, alta e crítica.
+2. Repita com `internet_exposed=true` e `exploitable=true`.
+3. Consulte `GET /api/vulnerabilities/summary`.
+
+Resultado esperado: score limitado a 10, prioridades e SLAs de 1/7/30/90 dias, contagem de
+vencidos e ordenação do maior risco para o menor.
+
+### OBS-VULN-005 — Remediação approval-first
+
+1. Clique em **Solicitar correção dry-run**.
+2. Abra **Remediações** e aprove como owner/admin.
+3. Confirme o resultado `simulated`.
+4. Marque o finding como resolvido após um rescan fictício.
+
+Resultado esperado: nenhuma alteração externa ocorre no dry-run; proposta, aprovação e mudança de
+status aparecem na auditoria.
+
+### OBS-VULN-006 — Aceite e falso positivo
+
+1. Em um finding aberto, clique **Aceitar risco**.
+2. Ressincronize o mesmo finding ainda aberto no scanner.
+3. Marque outro finding como **Falso positivo**.
+
+Resultado esperado: novo scan não apaga o aceite; decisões permanecem isoladas e auditadas.
+
+### OBS-VULN-007 — Isolamento multi-tenant
+
+1. Ingira um finding na tenancy Produção.
+2. Troque para Sandbox e consulte painel/API.
+3. Troque para outra company.
+
+Resultado esperado: o finding só existe na tenancy de origem e não pode ser descoberto por filtros,
+summary, alertas ou remediações de outro contexto.
+
+### OBS-VULN-008 — CLI
+
+```powershell
+observa vulnerabilities summary
+observa vulnerabilities list --severity critical
+observa vulnerabilities ingest findings.json --connection-id scanner-test
+observa vulnerabilities remediate <ID>
+```
+
+Resultado esperado: comandos respeitam company/tenancy, criam apenas dry-run por padrão e nunca
+imprimem credenciais.
+
+Guia funcional e contrato: `docs/VULNERABILITY_MANAGEMENT.md`.
+
+## 29. Vídeo completo
 
 Para revisar rapidamente todas as áreas, abra:
 
@@ -849,7 +930,7 @@ Remove-Item Env:OBSERVA_DEMO_API_KEY
 Resultado esperado: vídeo H.264, 1440×900, incluindo a tela de migração multicloud,
 sem token ou credencial visível.
 
-## 29. Evidências e aceite final
+## 30. Evidências e aceite final
 
 Para cada cenário, registre:
 

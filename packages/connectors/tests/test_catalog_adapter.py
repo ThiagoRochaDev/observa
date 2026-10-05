@@ -22,7 +22,7 @@ def test_adapter_tests_health_and_parses_canonical_payload(monkeypatch):
         "example",
         "Example",
         "data",
-        ["cost", "inventory", "metrics", "logs"],
+        ["cost", "inventory", "metrics", "logs", "vulnerabilities"],
         "Example adapter.",
     )
 
@@ -35,6 +35,11 @@ def test_adapter_tests_health_and_parses_canonical_payload(monkeypatch):
             "resources": [{"id": "resource-1", "type": "service", "name": "checkout"}],
             "metrics": [{"name": "latency", "value": 42, "ts": "2026-09-24T12:00:00Z"}],
             "logs": [{"message": "healthy", "severity": "info", "ts": "2026-09-24T12:00:00Z"}],
+            "vulnerabilities": [{
+                "id": "finding-1", "resource_id": "resource-1", "title": "Outdated demo package",
+                "severity": "high", "cvss": 8.2, "fixed_version": "2.0.0",
+                "detected_at": "2026-09-24T12:00:00Z", "internet_exposed": True,
+            }],
         }
 
     monkeypatch.setattr("observa_connectors.catalog.request_json", fake_request)
@@ -48,3 +53,6 @@ def test_adapter_tests_health_and_parses_canonical_payload(monkeypatch):
     assert result.resources[0].id == "resource-1"
     assert result.metrics[0].name == "latency"
     assert result.logs[0].message == "healthy"
+    assert result.vulnerabilities[0].external_id == "finding-1"
+    assert result.vulnerabilities[0].cvss == 8.2
+    assert result.vulnerabilities[0].internet_exposed is True

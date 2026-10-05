@@ -132,6 +132,7 @@ def main() -> None:
             ("050-governance.png", "/governance"),
             ("060-connections.png", "/connections"),
             ("070-alerts.png", "/alerts"),
+            ("075-vulnerabilities.png", "/vulnerabilities"),
             ("080-dashboards.png", "/dashboards"),
             ("090-observability.png", "/observability"),
             ("100-logs.png", "/logs"),

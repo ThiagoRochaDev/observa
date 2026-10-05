@@ -11,6 +11,7 @@ from observa_connectors.base import (
     PullResult,
     ResourceSignal,
     TestResult,
+    VulnerabilitySignal,
 )
 
 # Full demo catalog (FinOps + observability) — synthetic multi-product marketplace data.
@@ -68,9 +69,9 @@ class MockDemoConnector(BaseConnector):
     name = "Mock Demo (full platform)"
     description = (
         "Rich synthetic dataset: multi-product catalog, multi-cloud cost, "
-        "APM/DB metrics and alerts — for UI demos without real cloud credentials."
+        "APM/DB metrics, alerts and synthetic vulnerability findings — for UI demos without real cloud credentials."
     )
-    capabilities = ["cost", "inventory", "metrics", "alerts"]
+    capabilities = ["cost", "inventory", "metrics", "alerts", "vulnerabilities"]
     category = "demo"
     icon = "mock"
 
@@ -112,6 +113,82 @@ class MockDemoConnector(BaseConnector):
         costs: list[CostSignal] = []
         resources: list[ResourceSignal] = []
         metrics: list[MetricSignal] = []
+        vulnerabilities = [
+            VulnerabilitySignal(
+                external_id="OBS-DEMO-2026-0001",
+                source="trivy-demo",
+                provider="gcp",
+                resource_id="gke/easy-food/checkout-api",
+                asset_type="container_image",
+                title="Biblioteca HTTP demo requer atualização",
+                description="Finding sintético em imagem de container para demonstração segura.",
+                severity="critical",
+                cvss=9.4,
+                package_name="demo-http-lib",
+                installed_version="1.4.0-demo",
+                fixed_version="1.4.1-demo",
+                product="easy-food",
+                environment="prd",
+                status="open",
+                exploitable=True,
+                internet_exposed=True,
+                detected_at=now,
+                labels={"demo": "true", "scanner": "trivy"},
+            ),
+            VulnerabilitySignal(
+                external_id="OBS-DEMO-2026-0002",
+                source="security-hub-demo",
+                provider="aws",
+                resource_id="redis/easy-food-cache",
+                asset_type="managed_cache",
+                title="Configuração TLS demo abaixo da política",
+                description="Finding sintético de postura; nenhum ambiente real foi consultado.",
+                severity="high",
+                cvss=7.8,
+                product="easy-food",
+                environment="prd",
+                status="open",
+                internet_exposed=False,
+                detected_at=now - timedelta(hours=3),
+                labels={"demo": "true", "control": "transport-encryption"},
+            ),
+            VulnerabilitySignal(
+                external_id="OBS-DEMO-2026-0003",
+                source="openvas-demo",
+                provider="on-prem",
+                resource_id="vm/demo-lab-01",
+                asset_type="virtual_machine",
+                title="Pacote de sistema demo desatualizado",
+                description="Finding sintético de uma VM on-premises fictícia.",
+                severity="medium",
+                cvss=5.6,
+                package_name="demo-system-lib",
+                installed_version="2.0-demo",
+                fixed_version="2.1-demo",
+                product="observa",
+                environment="lab",
+                status="open",
+                detected_at=now - timedelta(days=1),
+                labels={"demo": "true", "scanner": "openvas"},
+            ),
+            VulnerabilitySignal(
+                external_id="OBS-DEMO-2026-0004",
+                source="cloud-guard-demo",
+                provider="oci",
+                resource_id="bucket/demo-archive",
+                asset_type="object_storage",
+                title="Política de acesso demo excessiva",
+                description="Finding sintético de postura OCI para demonstração.",
+                severity="low",
+                cvss=3.1,
+                product="vr-archviz",
+                environment="stg",
+                status="accepted",
+                internet_exposed=False,
+                detected_at=now - timedelta(days=2),
+                labels={"demo": "true", "service": "object-storage"},
+            ),
+        ]
 
         providers_cost = (
             ("gcp", 0.52),
@@ -299,9 +376,11 @@ class MockDemoConnector(BaseConnector):
             costs=costs,
             resources=resources,
             metrics=metrics,
+            vulnerabilities=vulnerabilities,
             message=(
                 f"Full demo: {len(costs)} costs, {len(resources)} resources, "
-                f"{len(metrics)} metric samples, {len(DEMO_PRODUCTS)} products"
+                f"{len(metrics)} metric samples, {len(vulnerabilities)} vulnerability findings, "
+                f"{len(DEMO_PRODUCTS)} products"
             ),
         )
 

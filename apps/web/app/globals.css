@@ -4743,6 +4743,53 @@ textarea {
   }
 }
 
+.vuln-page { display: grid; gap: 14px; }
+.vuln-privacy { display: flex; align-items: center; gap: 18px; border-color: #2f6f6655; background: #10231f88; }
+.vuln-privacy strong { color: #75dfc5; white-space: nowrap; }
+.vuln-privacy span { color: #a9b9c6; font-size: 12px; }
+.vuln-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.vuln-kpis article { display: grid; gap: 4px; }
+.vuln-kpis span, .vuln-kpis small { color: var(--text-muted); font-size: 11px; }
+.vuln-kpis strong { font-size: 28px; color: #edf4fa; }
+.vuln-kpis .danger strong { color: #f29789; }
+.vuln-toolbar { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)) auto; gap: 10px; align-items: end; }
+.vuln-toolbar label { display: grid; gap: 5px; color: var(--text-muted); font-size: 11px; }
+.vuln-toolbar select { width: 100%; padding: 8px 10px; }
+.vuln-toolbar > span { color: var(--text-muted); font-size: 11px; padding-bottom: 9px; }
+.vuln-list { display: grid; gap: 10px; }
+.vuln-finding { position: relative; overflow: hidden; }
+.vuln-finding::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: #718096; }
+.vuln-finding.priority-urgent::before { background: #ef7867; box-shadow: 0 0 14px #ef786799; }
+.vuln-finding.priority-high::before { background: #e9bd55; }
+.vuln-finding.priority-medium::before { background: #70a7ff; }
+.vuln-finding.priority-low::before { background: #70c9a7; }
+.vuln-finding-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.vuln-title { display: flex; gap: 12px; align-items: flex-start; }
+.vuln-title h2 { margin: 0 0 4px; font-size: 16px; }
+.vuln-title p { margin: 0; color: var(--text-muted); font-size: 11px; }
+.vuln-severity { padding: 5px 8px; border-radius: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; background: #202833; }
+.vuln-severity.critical { color: #ff9b8e; background: #5e251f66; }
+.vuln-severity.high { color: #f0cf7a; background: #5c481b66; }
+.vuln-severity.medium { color: #92bcff; background: #1d396566; }
+.vuln-severity.low { color: #89dfc6; background: #17463766; }
+.vuln-score { display: grid; text-align: right; }
+.vuln-score strong { font-size: 22px; }
+.vuln-score span { color: var(--text-muted); font-size: 9px; text-transform: uppercase; }
+.vuln-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.vuln-tags span { border: 1px solid #313c49; border-radius: 999px; padding: 3px 7px; color: #aab7c4; font-size: 9px; }
+.vuln-tags span.danger { border-color: #ef786755; color: #f29789; }
+.vuln-description { margin: 12px 0 0; color: #bac5cf; font-size: 12px; }
+.vuln-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.vuln-details div { display: grid; gap: 3px; padding: 9px; border-radius: 7px; background: #0e141b; border: 1px solid #252e39; }
+.vuln-details span { color: var(--text-muted); font-size: 9px; text-transform: uppercase; }
+.vuln-details strong { font-size: 10px; overflow-wrap: anywhere; }
+.vuln-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+@media (max-width: 900px) {
+  .vuln-kpis, .vuln-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vuln-toolbar { grid-template-columns: 1fr; }
+  .vuln-privacy { align-items: flex-start; flex-direction: column; }
+}
+
 /* ── Multicloud migration simulator ── */
 .migration-page { display: grid; gap: 18px; }
 .migration-hero, .migration-result-head, .migration-section-head, .migration-cloud-title,

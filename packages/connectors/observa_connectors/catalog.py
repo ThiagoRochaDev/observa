@@ -11,6 +11,7 @@ from observa_connectors.base import (
     PullResult,
     ResourceSignal,
     TestResult,
+    VulnerabilitySignal,
 )
 from observa_connectors.http import request_json
 
@@ -105,11 +106,17 @@ class AdapterCatalogConnector(BaseConnector):
         resources = [self._resource(row) for row in body.get("resources", []) if isinstance(row, dict)]
         metrics = [self._metric(row) for row in body.get("metrics", []) if isinstance(row, dict)]
         logs = [self._log(row) for row in body.get("logs", []) if isinstance(row, dict)]
+        vulnerabilities = [
+            self._vulnerability(row)
+            for row in body.get("vulnerabilities", [])
+            if isinstance(row, dict)
+        ]
         return PullResult(
             costs=costs,
             resources=resources,
             metrics=metrics,
             logs=logs,
+            vulnerabilities=vulnerabilities,
             message=str(body.get("message") or f"{self.name} adapter synchronized."),
         )
 
@@ -163,6 +170,31 @@ class AdapterCatalogConnector(BaseConnector):
             product=row.get("product"),
             service=row.get("service"),
             trace_id=row.get("trace_id"),
+            labels={str(key): str(value) for key, value in (row.get("labels") or {}).items()},
+        )
+
+    def _vulnerability(self, row: dict[str, Any]) -> VulnerabilitySignal:
+        raw_ts = str(row.get("detected_at") or datetime.now(timezone.utc).isoformat()).replace("Z", "+00:00")
+        return VulnerabilitySignal(
+            external_id=str(row.get("external_id") or row.get("id") or "unknown"),
+            source=str(row.get("source") or self.id),
+            provider=str(row.get("provider") or self.id),
+            resource_id=str(row.get("resource_id") or row.get("asset_id") or "unknown"),
+            title=str(row.get("title") or row.get("cve") or "Vulnerability finding"),
+            severity=str(row.get("severity") or "unknown"),
+            detected_at=datetime.fromisoformat(raw_ts),
+            asset_type=row.get("asset_type"),
+            description=row.get("description"),
+            cve=row.get("cve"),
+            cvss=float(row["cvss"]) if row.get("cvss") is not None else None,
+            package_name=row.get("package_name"),
+            installed_version=row.get("installed_version"),
+            fixed_version=row.get("fixed_version"),
+            product=row.get("product"),
+            environment=row.get("environment"),
+            status=str(row.get("status") or "open"),
+            exploitable=bool(row.get("exploitable", False)),
+            internet_exposed=bool(row.get("internet_exposed", False)),
             labels={str(key): str(value) for key, value in (row.get("labels") or {}).items()},
         )
 
@@ -243,16 +275,22 @@ CATALOG_SPECS = [
     ("supabase", "Supabase", "data", ["cost", "inventory", "metrics"], "Supabase projects, databases and usage."),
     ("firebase", "Firebase", "data", ["cost", "inventory", "metrics"], "Firebase projects, products and usage."),
     # Security and identity
-    ("wiz", "Wiz", "security", ["inventory", "alerts"], "Wiz cloud assets, issues and security posture."),
-    ("prisma-cloud", "Prisma Cloud", "security", ["inventory", "alerts"], "Prisma Cloud assets, findings and posture."),
+    ("aws-security-hub", "AWS Security Hub", "security", ["inventory", "alerts", "vulnerabilities"], "AWS Security Hub findings normalized by an Observa adapter."),
+    ("gcp-security-command-center", "GCP Security Command Center", "security", ["inventory", "alerts", "vulnerabilities"], "Security Command Center findings normalized by an Observa adapter."),
+    ("microsoft-defender-cloud", "Microsoft Defender for Cloud", "security", ["inventory", "alerts", "vulnerabilities"], "Defender for Cloud recommendations and findings normalized by an Observa adapter."),
+    ("oci-cloud-guard", "OCI Cloud Guard", "security", ["inventory", "alerts", "vulnerabilities"], "OCI Cloud Guard problems normalized by an Observa adapter."),
+    ("wiz", "Wiz", "security", ["inventory", "alerts", "vulnerabilities"], "Wiz cloud assets, issues and security posture."),
+    ("prisma-cloud", "Prisma Cloud", "security", ["inventory", "alerts", "vulnerabilities"], "Prisma Cloud assets, findings and posture."),
     ("crowdstrike", "CrowdStrike Falcon", "security", ["inventory", "alerts"], "Falcon hosts, detections and incidents."),
     ("okta", "Okta", "security", ["inventory", "logs"], "Okta users, applications and system events."),
     ("auth0", "Auth0", "security", ["inventory", "logs"], "Auth0 tenants, clients and authentication logs."),
     ("keycloak", "Keycloak", "security", ["inventory", "logs"], "Keycloak realms, clients and authentication events."),
-    ("sonarqube", "SonarQube", "security", ["inventory", "metrics", "alerts"], "SonarQube projects, quality gates and findings."),
-    ("snyk", "Snyk", "security", ["inventory", "alerts"], "Snyk projects, vulnerabilities and fixable issues."),
-    ("trivy", "Trivy", "security", ["inventory", "alerts"], "Trivy vulnerability and misconfiguration reports."),
-    ("falco", "Falco", "security", ["logs", "alerts"], "Falco runtime security events."),
+    ("sonarqube", "SonarQube", "security", ["inventory", "metrics", "alerts", "vulnerabilities"], "SonarQube projects, quality gates and findings."),
+    ("snyk", "Snyk", "security", ["inventory", "alerts", "vulnerabilities"], "Snyk projects, vulnerabilities and fixable issues."),
+    ("trivy", "Trivy", "security", ["inventory", "alerts", "vulnerabilities"], "Trivy vulnerability and misconfiguration reports."),
+    ("grype", "Grype", "security", ["inventory", "vulnerabilities"], "Grype image and filesystem vulnerability reports."),
+    ("openvas", "OpenVAS / Greenbone", "security", ["inventory", "alerts", "vulnerabilities"], "On-premises host and network vulnerability findings."),
+    ("falco", "Falco", "security", ["logs", "alerts", "vulnerabilities"], "Falco runtime security events."),
     ("gitguardian", "GitGuardian", "security", ["inventory", "alerts"], "GitGuardian secret incidents and perimeter findings."),
 ]
 

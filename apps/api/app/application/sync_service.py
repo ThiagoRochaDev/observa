@@ -8,6 +8,7 @@ from observa_connectors import get_connector, list_connectors
 from observa_connectors.mock_demo import demo_alerts, demo_product_catalog
 
 from app.application.demo_platform import logs as demo_logs
+from app.application import vulnerability_service
 from app.core import db
 
 logger = logging.getLogger(__name__)
@@ -100,18 +101,45 @@ def sync_connection(conn_id: str) -> dict:
             }
             for item in result.logs
         ]
+        vulnerability_rows = [
+            {
+                "external_id": item.external_id,
+                "source": item.source,
+                "provider": item.provider,
+                "resource_id": item.resource_id,
+                "asset_type": item.asset_type,
+                "title": item.title,
+                "description": item.description,
+                "severity": item.severity,
+                "cvss": item.cvss,
+                "cve": item.cve,
+                "package_name": item.package_name,
+                "installed_version": item.installed_version,
+                "fixed_version": item.fixed_version,
+                "product": item.product,
+                "environment": item.environment,
+                "status": item.status,
+                "exploitable": item.exploitable,
+                "internet_exposed": item.internet_exposed,
+                "detected_at": item.detected_at.isoformat().replace("+00:00", "Z"),
+                "labels": item.labels,
+            }
+            for item in result.vulnerabilities
+        ]
         if row["connector_id"] == "mock-demo":
             log_rows = demo_logs(limit=120)
         db.replace_costs(conn_id, cost_rows)
         db.replace_resources(conn_id, resource_rows)
         db.replace_metrics(conn_id, metric_rows)
         db.replace_logs(conn_id, log_rows)
+        vulnerability_count = vulnerability_service.ingest(conn_id, vulnerability_rows)["count"]
         if row["connector_id"] == "mock-demo":
             db.replace_alerts(demo_alerts())
             db.set_setting("product_catalog", demo_product_catalog())
         msg = result.message or (
             f"Synced {len(cost_rows)} costs, {len(resource_rows)} resources, "
-            f"{len(metric_rows)} metrics, {len(log_rows)} logs"
+            f"{len(metric_rows)} metrics, {len(log_rows)} logs, "
+            f"{vulnerability_count} vulnerabilities"
         )
         db.mark_sync(conn_id, "ok", msg)
         return {
@@ -121,6 +149,7 @@ def sync_connection(conn_id: str) -> dict:
             "resources": len(resource_rows),
             "metrics": len(metric_rows),
             "logs": len(log_rows),
+            "vulnerabilities": vulnerability_count,
         }
     except NotImplementedError:
         msg = "Connector not implemented yet — configure in UI; use mock-demo for local data."

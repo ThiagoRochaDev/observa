@@ -30,6 +30,7 @@ def test_mcp_lists_only_read_only_observa_tools(client):
         "observa_inventory",
         "observa_products",
         "observa_alerts",
+        "observa_vulnerabilities",
     }
     assert all(tool["annotations"]["readOnlyHint"] is True for tool in tools)
     assert all(tool["annotations"]["destructiveHint"] is False for tool in tools)
@@ -58,6 +59,21 @@ def test_mcp_calls_cost_and_inventory_tools(client):
     inventory = inventory_response.json()["result"]["structuredContent"]
     assert inventory["count"] <= 2
     assert "resources" in inventory
+
+    vulnerability_name = "observa_vulnerabilities"
+    vulnerability_response = client.post(
+        "/mcp",
+        headers=_headers("tools/call", vulnerability_name),
+        json=_rpc(
+            "tools/call",
+            {"name": vulnerability_name, "arguments": {"severity": "critical", "limit": 2}},
+        ),
+    )
+    assert vulnerability_response.status_code == 200
+    vulnerabilities = vulnerability_response.json()["result"]["structuredContent"]
+    assert vulnerabilities["count"] <= 2
+    assert "summary" in vulnerabilities
+    assert "findings" in vulnerabilities
 
 
 def test_mcp_rejects_header_body_mismatch(client):

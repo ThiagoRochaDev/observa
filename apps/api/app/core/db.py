@@ -17,6 +17,7 @@ DEFAULT_COMPANY_ID = "cmp_default"
 DEFAULT_TENANCY_ID = "tnt_default"
 
 _lock = threading.RLock()
+_initialized_tenancies: set[str] = set()
 _current_tenancy_id: ContextVar[str] = ContextVar(
     "observa_tenancy_id", default=DEFAULT_TENANCY_ID
 )
@@ -204,6 +205,38 @@ def init_db() -> None:
                   labels_json TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS vulnerabilities (
+                  id TEXT PRIMARY KEY,
+                  fingerprint TEXT NOT NULL UNIQUE,
+                  connection_id TEXT NOT NULL,
+                  external_id TEXT NOT NULL,
+                  source TEXT NOT NULL,
+                  provider TEXT NOT NULL,
+                  resource_id TEXT NOT NULL,
+                  asset_type TEXT,
+                  title TEXT NOT NULL,
+                  description TEXT,
+                  severity TEXT NOT NULL,
+                  cvss REAL,
+                  cve TEXT,
+                  package_name TEXT,
+                  installed_version TEXT,
+                  fixed_version TEXT,
+                  product TEXT,
+                  environment TEXT,
+                  status TEXT NOT NULL,
+                  exploitable INTEGER NOT NULL DEFAULT 0,
+                  internet_exposed INTEGER NOT NULL DEFAULT 0,
+                  risk_score REAL NOT NULL,
+                  priority TEXT NOT NULL,
+                  due_at TEXT,
+                  detected_at TEXT NOT NULL,
+                  first_seen_at TEXT NOT NULL,
+                  last_seen_at TEXT NOT NULL,
+                  remediation_proposal_id TEXT,
+                  labels_json TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS remediation_proposals (
                   id TEXT PRIMARY KEY,
                   fingerprint TEXT NOT NULL UNIQUE,
@@ -333,6 +366,10 @@ def init_db() -> None:
                 CREATE INDEX IF NOT EXISTS idx_metrics_product ON metrics(product);
                 CREATE INDEX IF NOT EXISTS idx_logs_ts ON log_events(ts);
                 CREATE INDEX IF NOT EXISTS idx_logs_product ON log_events(product);
+                CREATE INDEX IF NOT EXISTS idx_vulnerabilities_status ON vulnerabilities(status);
+                CREATE INDEX IF NOT EXISTS idx_vulnerabilities_priority ON vulnerabilities(priority);
+                CREATE INDEX IF NOT EXISTS idx_vulnerabilities_product ON vulnerabilities(product);
+                CREATE INDEX IF NOT EXISTS idx_vulnerabilities_resource ON vulnerabilities(resource_id);
                 CREATE INDEX IF NOT EXISTS idx_remediations_status ON remediation_proposals(status);
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_identity
                   ON resources(connection_id, provider, resource_key);
@@ -378,6 +415,13 @@ def init_db() -> None:
             conn.commit()
         finally:
             conn.close()
+        _initialized_tenancies.add(current_tenancy_id())
+
+
+def ensure_current_tenant_db() -> None:
+    if current_tenancy_id() in _initialized_tenancies:
+        return
+    init_db()
 
 
 def database_health() -> dict[str, str]:
@@ -1047,6 +1091,166 @@ def _remediation_dict(row: sqlite3.Row) -> dict:
         "result_message": row["result_message"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+    }
+
+
+def upsert_vulnerabilities(connection_id: str, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+    with db() as conn:
+        conn.executemany(
+            """INSERT INTO vulnerabilities(
+                 id, fingerprint, connection_id, external_id, source, provider, resource_id,
+                 asset_type, title, description, severity, cvss, cve, package_name,
+                 installed_version, fixed_version, product, environment, status, exploitable,
+                 internet_exposed, risk_score, priority, due_at, detected_at, first_seen_at,
+                 last_seen_at, remediation_proposal_id, labels_json
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+               ON CONFLICT(fingerprint) DO UPDATE SET
+                 connection_id = excluded.connection_id,
+                 external_id = excluded.external_id,
+                 source = excluded.source,
+                 provider = excluded.provider,
+                 resource_id = excluded.resource_id,
+                 asset_type = excluded.asset_type,
+                 title = excluded.title,
+                 description = excluded.description,
+                 severity = excluded.severity,
+                 cvss = excluded.cvss,
+                 cve = excluded.cve,
+                 package_name = excluded.package_name,
+                 installed_version = excluded.installed_version,
+                 fixed_version = excluded.fixed_version,
+                 product = excluded.product,
+                 environment = excluded.environment,
+                 status = CASE
+                   WHEN vulnerabilities.status IN ('accepted', 'remediation_pending')
+                    AND excluded.status = 'open' THEN vulnerabilities.status
+                   ELSE excluded.status
+                 END,
+                 exploitable = excluded.exploitable,
+                 internet_exposed = excluded.internet_exposed,
+                 risk_score = excluded.risk_score,
+                 priority = excluded.priority,
+                 due_at = excluded.due_at,
+                 detected_at = excluded.detected_at,
+                 last_seen_at = excluded.last_seen_at,
+                 labels_json = excluded.labels_json""",
+            [
+                (
+                    row["id"], row["fingerprint"], connection_id, row["external_id"],
+                    row["source"], row["provider"], row["resource_id"], row.get("asset_type"),
+                    row["title"], row.get("description"), row["severity"], row.get("cvss"),
+                    row.get("cve"), row.get("package_name"), row.get("installed_version"),
+                    row.get("fixed_version"), row.get("product"), row.get("environment"),
+                    row["status"], 1 if row.get("exploitable") else 0,
+                    1 if row.get("internet_exposed") else 0, row["risk_score"],
+                    row["priority"], row.get("due_at"), row["detected_at"],
+                    row["first_seen_at"], row["last_seen_at"],
+                    json.dumps(row.get("labels") or {}),
+                )
+                for row in rows
+            ],
+        )
+    return len(rows)
+
+
+def list_vulnerabilities(
+    *, status: str | None = None, severity: str | None = None,
+    provider: str | None = None, product: str | None = None,
+    source: str | None = None,
+) -> list[dict]:
+    clauses: list[str] = []
+    values: list[Any] = []
+    for column, value in (
+        ("status", status), ("severity", severity), ("provider", provider),
+        ("product", product), ("source", source),
+    ):
+        if value:
+            clauses.append(f"{column} = ?")
+            values.append(value)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM vulnerabilities" + where
+            + " ORDER BY risk_score DESC, last_seen_at DESC",
+            values,
+        ).fetchall()
+    return [_vulnerability_dict(row) for row in rows]
+
+
+def get_vulnerability(vulnerability_id: str) -> dict | None:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM vulnerabilities WHERE id = ?", (vulnerability_id,)
+        ).fetchone()
+    return _vulnerability_dict(row) if row else None
+
+
+def update_vulnerability_status(vulnerability_id: str, status: str) -> dict | None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE vulnerabilities SET status = ? WHERE id = ?",
+            (status, vulnerability_id),
+        )
+    return get_vulnerability(vulnerability_id)
+
+
+def link_vulnerability_remediation(vulnerability_id: str, proposal_id: str) -> dict | None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE vulnerabilities SET remediation_proposal_id = ?, status = 'remediation_pending' "
+            "WHERE id = ?",
+            (proposal_id, vulnerability_id),
+        )
+    return get_vulnerability(vulnerability_id)
+
+
+def vulnerability_summary() -> dict:
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT status, severity, provider, priority, exploitable, internet_exposed "
+            "FROM vulnerabilities"
+        ).fetchall()
+    findings = [dict(row) for row in rows]
+    active = [row for row in findings if row["status"] not in {"resolved", "false_positive"}]
+    return {
+        "total": len(findings),
+        "active": len(active),
+        "critical": sum(row["severity"] == "critical" for row in active),
+        "high": sum(row["severity"] == "high" for row in active),
+        "exploitable": sum(bool(row["exploitable"]) for row in active),
+        "internet_exposed": sum(bool(row["internet_exposed"]) for row in active),
+        "overdue": 0,
+        "by_provider": {
+            provider: sum(row["provider"] == provider for row in active)
+            for provider in sorted({row["provider"] for row in active})
+        },
+        "by_priority": {
+            priority: sum(row["priority"] == priority for row in active)
+            for priority in ("urgent", "high", "medium", "low")
+        },
+    }
+
+
+def _vulnerability_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"], "fingerprint": row["fingerprint"],
+        "connection_id": row["connection_id"], "external_id": row["external_id"],
+        "source": row["source"], "provider": row["provider"],
+        "resource_id": row["resource_id"], "asset_type": row["asset_type"],
+        "title": row["title"], "description": row["description"],
+        "severity": row["severity"], "cvss": row["cvss"], "cve": row["cve"],
+        "package_name": row["package_name"], "installed_version": row["installed_version"],
+        "fixed_version": row["fixed_version"], "product": row["product"],
+        "environment": row["environment"], "status": row["status"],
+        "exploitable": bool(row["exploitable"]),
+        "internet_exposed": bool(row["internet_exposed"]),
+        "risk_score": row["risk_score"], "priority": row["priority"],
+        "due_at": row["due_at"], "detected_at": row["detected_at"],
+        "first_seen_at": row["first_seen_at"], "last_seen_at": row["last_seen_at"],
+        "remediation_proposal_id": row["remediation_proposal_id"],
+        "labels": json.loads(row["labels_json"] or "{}"),
     }
 
 

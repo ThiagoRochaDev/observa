@@ -261,6 +261,27 @@ export const api = {
   },
   alerts: (status?: string) =>
     req<Alert[]>(`/api/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  vulnerabilitySummary: () => req<VulnerabilitySummary>('/api/vulnerabilities/summary'),
+  vulnerabilities: (params: {
+    status?: string
+    severity?: string
+    provider?: string
+    product?: string
+    source?: string
+  } = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => { if (value) query.set(key, value) })
+    const serialized = query.toString()
+    return req<Vulnerability[]>(`/api/vulnerabilities${serialized ? `?${serialized}` : ''}`)
+  },
+  updateVulnerabilityStatus: (id: string, status: 'open' | 'accepted' | 'resolved' | 'false_positive') =>
+    req<Vulnerability>(`/api/vulnerabilities/${id}/status`, {
+      method: 'PATCH', body: JSON.stringify({ status }),
+    }),
+  requestVulnerabilityRemediation: (id: string, body: { executor_connection_id?: string; dry_run?: boolean } = {}) =>
+    req<RemediationProposal>(`/api/vulnerabilities/${id}/remediation`, {
+      method: 'POST', body: JSON.stringify({ dry_run: true, ...body }),
+    }),
   remediations: (status?: string) =>
     req<RemediationProposal[]>(
       `/api/remediations${status ? `?status=${encodeURIComponent(status)}` : ''}`,
@@ -312,6 +333,7 @@ export type Health = {
   connections: number
   cost_records: number
   open_alerts?: number
+  active_vulnerabilities?: number
   metric_series?: number
   auth_mode: string
   company_id: string
@@ -703,6 +725,50 @@ export type Alert = {
   message?: string
   status: string
   detected_at: string
+}
+
+export type Vulnerability = {
+  id: string
+  fingerprint: string
+  connection_id: string
+  external_id: string
+  source: string
+  provider: string
+  resource_id: string
+  asset_type?: string | null
+  title: string
+  description?: string | null
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+  cvss?: number | null
+  cve?: string | null
+  package_name?: string | null
+  installed_version?: string | null
+  fixed_version?: string | null
+  product?: string | null
+  environment?: string | null
+  status: string
+  exploitable: boolean
+  internet_exposed: boolean
+  risk_score: number
+  priority: 'urgent' | 'high' | 'medium' | 'low'
+  due_at?: string | null
+  detected_at: string
+  first_seen_at: string
+  last_seen_at: string
+  remediation_proposal_id?: string | null
+  labels: Record<string, string>
+}
+
+export type VulnerabilitySummary = {
+  total: number
+  active: number
+  critical: number
+  high: number
+  exploitable: number
+  internet_exposed: number
+  overdue: number
+  by_provider: Record<string, number>
+  by_priority: Record<string, number>
 }
 
 export type RemediationProposal = {

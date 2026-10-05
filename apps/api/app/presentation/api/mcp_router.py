@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Header
 from fastapi.responses import JSONResponse
 
+from app.application import vulnerability_service
 from app.core import db
 from app.core.tenancy import require_tenancy
 
@@ -68,6 +69,24 @@ TOOLS = [
         },
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True},
     },
+    {
+        "name": "observa_vulnerabilities",
+        "title": "Observa vulnerability findings",
+        "description": "Summarize and list prioritized cloud and on-premises findings in the active tenancy.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "unknown"]},
+                "provider": {"type": "string"},
+                "product": {"type": "string"},
+                "source": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            },
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True},
+    },
 ]
 
 
@@ -120,6 +139,18 @@ def _call_tool(name: str, arguments: dict[str, Any], context: dict[str, Any]) ->
         limit = _bounded_int(arguments.get("limit"), 50, 1, 200)
         alerts = db.list_alerts(arguments.get("status"))[:limit]
         return _tool_result({"count": len(alerts), "alerts": alerts})
+    if name == "observa_vulnerabilities":
+        limit = _bounded_int(arguments.get("limit"), 50, 1, 200)
+        findings = vulnerability_service.list_findings(
+            status=arguments.get("status"),
+            severity=arguments.get("severity"),
+            provider=arguments.get("provider"),
+            product=arguments.get("product"),
+            source=arguments.get("source"),
+        )[:limit]
+        return _tool_result(
+            {"summary": vulnerability_service.summary(), "count": len(findings), "findings": findings}
+        )
     raise KeyError(name)
 
 

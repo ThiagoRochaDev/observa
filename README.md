@@ -192,6 +192,12 @@ Cost limits and projected-spend guardrails are available in **Budgets**. Rules c
 an intentional exception, or create shutdown actions that remain pending until an owner approves
 them. See [docs/BUDGET_GUARDRAILS.md](docs/BUDGET_GUARDRAILS.md).
 
+The **Vulnerabilities** workspace normalizes cloud and on-premises findings from AWS Security Hub,
+GCP Security Command Center, Defender for Cloud, OCI Cloud Guard, Trivy, Grype, OpenVAS and other
+customer-managed adapters. It deduplicates findings, calculates exposure-aware risk, enforces
+tenant isolation and creates approval-first remediation proposals. See
+[docs/VULNERABILITY_MANAGEMENT.md](docs/VULNERABILITY_MANAGEMENT.md).
+
 The **Multicloud migration** screen normalizes an existing resource, product, account or custom
 architecture and compares equivalent services and SKUs on AWS, Google Cloud, Azure and Oracle
 Cloud Infrastructure. Production mode consumes official provider catalogs and fails closed when a

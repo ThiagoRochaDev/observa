@@ -13,6 +13,7 @@ from app.application import (
     official_pricing_service,
     remediation_service,
     sync_service,
+    vulnerability_service,
 )
 from app.core import db
 from app.core.crypto import encrypt_json
@@ -214,6 +215,43 @@ class LogIngestBody(BaseModel):
     logs: list[LogEventInput] = Field(min_length=1, max_length=1000)
 
 
+class VulnerabilityInput(BaseModel):
+    external_id: str = Field(min_length=1, max_length=500)
+    source: str = Field(default="push-api", min_length=1, max_length=120)
+    provider: str = Field(default="unknown", min_length=1, max_length=80)
+    resource_id: str = Field(min_length=1, max_length=500)
+    asset_type: str | None = Field(default=None, max_length=120)
+    title: str = Field(min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=10000)
+    severity: str = "unknown"
+    cvss: float | None = Field(default=None, ge=0, le=10)
+    cve: str | None = Field(default=None, max_length=80)
+    package_name: str | None = Field(default=None, max_length=300)
+    installed_version: str | None = Field(default=None, max_length=200)
+    fixed_version: str | None = Field(default=None, max_length=200)
+    product: str | None = Field(default=None, max_length=200)
+    environment: str | None = Field(default=None, max_length=100)
+    status: str = "open"
+    exploitable: bool = False
+    internet_exposed: bool = False
+    detected_at: datetime | None = None
+    labels: dict[str, str] = Field(default_factory=dict)
+
+
+class VulnerabilityIngestBody(BaseModel):
+    connection_id: str = Field(default="push-api", min_length=1, max_length=200)
+    vulnerabilities: list[VulnerabilityInput] = Field(min_length=1, max_length=1000)
+
+
+class VulnerabilityStatusBody(BaseModel):
+    status: str
+
+
+class VulnerabilityRemediationBody(BaseModel):
+    executor_connection_id: str | None = None
+    dry_run: bool = True
+
+
 class RemediationAnalyzeBody(BaseModel):
     executor_connection_id: str | None = None
     dry_run: bool = True
@@ -234,12 +272,14 @@ def health():
     summary = db.cost_summary(30)
     obs = db.observability_overview()
     context = db.tenancy_context_info()
+    vulnerability_summary = vulnerability_service.summary()
     return {
         "status": "ok",
         "app": "observa",
         "connections": len(db.list_connections()),
         "cost_records": summary["records"],
         "open_alerts": summary.get("open_alerts", 0),
+        "active_vulnerabilities": vulnerability_summary["active"],
         "metric_series": obs.get("metric_count", 0),
         "auth_mode": (db.get_global_setting("auth") or {}).get("mode", "local"),
         "company_id": context["company"]["id"],
@@ -735,6 +775,63 @@ def ingest_logs(body: LogIngestBody):
     count = db.append_logs(body.connection_id, rows)
     db.add_audit_event("logs.ingested", body.connection_id, {"count": count})
     return {"ok": True, "count": count}
+
+
+@router.get("/vulnerabilities/summary")
+def vulnerability_summary():
+    return vulnerability_service.summary()
+
+
+@router.get("/vulnerabilities")
+def vulnerabilities(
+    status: str | None = None,
+    severity: str | None = None,
+    provider: str | None = None,
+    product: str | None = None,
+    source: str | None = None,
+):
+    return vulnerability_service.list_findings(
+        status=status,
+        severity=severity,
+        provider=provider,
+        product=product,
+        source=source,
+    )
+
+
+@router.post("/vulnerabilities/ingest", dependencies=[Depends(require_tenancy_operator)])
+def ingest_vulnerabilities(body: VulnerabilityIngestBody):
+    rows = [item.model_dump() for item in body.vulnerabilities]
+    return vulnerability_service.ingest(body.connection_id, rows)
+
+
+@router.patch(
+    "/vulnerabilities/{vulnerability_id}/status",
+    dependencies=[Depends(require_tenancy_operator)],
+)
+def update_vulnerability_status(vulnerability_id: str, body: VulnerabilityStatusBody):
+    try:
+        return vulnerability_service.change_status(vulnerability_id, body.status)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post(
+    "/vulnerabilities/{vulnerability_id}/remediation",
+    dependencies=[Depends(require_tenancy_operator)],
+)
+def request_vulnerability_remediation(
+    vulnerability_id: str, body: VulnerabilityRemediationBody | None = None,
+):
+    payload = body or VulnerabilityRemediationBody()
+    try:
+        return vulnerability_service.request_remediation(
+            vulnerability_id,
+            executor_connection_id=payload.executor_connection_id,
+            dry_run=payload.dry_run,
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/remediations")

@@ -30,6 +30,7 @@ async def require_tenancy(
 
     token = db.set_current_tenancy(tenancy_id)
     try:
+        db.ensure_current_tenant_db()
         yield {"company": company, "tenancy": tenancy, "actor": actor, "member": member}
     finally:
         db.reset_current_tenancy(token)

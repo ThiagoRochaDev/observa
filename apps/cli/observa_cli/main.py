@@ -163,6 +163,26 @@ def build_parser() -> argparse.ArgumentParser:
     remediation_reject.add_argument("proposal_id")
     remediation_reject.add_argument("--reason", default="Rejected from CLI")
 
+    vulnerabilities = commands.add_parser("vulnerabilities", help="Monitor cloud and on-prem vulnerability findings")
+    vulnerability_sub = vulnerabilities.add_subparsers(dest="operation", required=True)
+    vulnerability_list = vulnerability_sub.add_parser("list")
+    vulnerability_list.add_argument("--status")
+    vulnerability_list.add_argument("--severity", choices=["critical", "high", "medium", "low", "unknown"])
+    vulnerability_list.add_argument("--provider")
+    vulnerability_list.add_argument("--product")
+    vulnerability_list.add_argument("--source")
+    vulnerability_sub.add_parser("summary")
+    vulnerability_ingest = vulnerability_sub.add_parser("ingest")
+    vulnerability_ingest.add_argument("file", help="Canonical observa.vulnerability.v1 JSON list")
+    vulnerability_ingest.add_argument("--connection-id", default="cli-scanner")
+    vulnerability_status = vulnerability_sub.add_parser("status")
+    vulnerability_status.add_argument("vulnerability_id")
+    vulnerability_status.add_argument("status", choices=["open", "accepted", "resolved", "false_positive"])
+    vulnerability_remediate = vulnerability_sub.add_parser("remediate")
+    vulnerability_remediate.add_argument("vulnerability_id")
+    vulnerability_remediate.add_argument("--executor")
+    vulnerability_remediate.add_argument("--apply", action="store_true", help="Request real execution after a separate admin approval")
+
     run = commands.add_parser("run-due")
     run.add_argument("--at", help="ISO-8601 timestamp used for deterministic evaluation")
     run_all = commands.add_parser("run-all-tenancies")
@@ -327,6 +347,46 @@ def dispatch(client: Client, args: argparse.Namespace) -> Any:
             f"/api/remediations/{args.proposal_id}/reject",
             {"reason": args.reason},
         )
+    if args.command == "vulnerabilities" and args.operation == "list":
+        query = urllib.parse.urlencode(
+            {
+                key: value
+                for key, value in {
+                    "status": args.status,
+                    "severity": args.severity,
+                    "provider": args.provider,
+                    "product": args.product,
+                    "source": args.source,
+                }.items()
+                if value
+            }
+        )
+        return client.request("GET", f"/api/vulnerabilities{'?' + query if query else ''}")
+    if args.command == "vulnerabilities" and args.operation == "summary":
+        return client.request("GET", "/api/vulnerabilities/summary")
+    if args.command == "vulnerabilities" and args.operation == "ingest":
+        with open(args.file, encoding="utf-8") as vulnerability_file:
+            loaded = json.load(vulnerability_file)
+        rows = loaded.get("vulnerabilities", loaded) if isinstance(loaded, dict) else loaded
+        if not isinstance(rows, list) or not rows:
+            raise ValueError("Vulnerability JSON must be a non-empty list or contain vulnerabilities")
+        return client.request(
+            "POST",
+            "/api/vulnerabilities/ingest",
+            {"connection_id": args.connection_id, "vulnerabilities": rows},
+        )
+    if args.command == "vulnerabilities" and args.operation == "status":
+        return client.request(
+            "PATCH",
+            f"/api/vulnerabilities/{args.vulnerability_id}/status",
+            {"status": args.status},
+        )
+    if args.command == "vulnerabilities" and args.operation == "remediate":
+        return client.request(
+            "POST",
+            f"/api/vulnerabilities/{args.vulnerability_id}/remediation",
+            {"executor_connection_id": args.executor, "dry_run": not args.apply},
+        )
     if args.command == "run-due":
         return client.request("POST", "/api/automation/run-due", {"at": args.at})
     if args.command == "run-all-tenancies":
@@ -353,7 +413,11 @@ def print_result(result: Any, *, raw: bool) -> None:
     if not result:
         print("No results")
         return
-    columns = [key for key in ("uid", "id", "name", "provider", "type", "status", "action") if key in result[0]]
+    columns = [
+        key for key in
+        ("uid", "id", "name", "provider", "type", "severity", "priority", "risk_score", "status", "action")
+        if key in result[0]
+    ]
     widths = {column: max(len(column), *(len(str(row.get(column, ""))) for row in result)) for column in columns}
     print("  ".join(column.upper().ljust(widths[column]) for column in columns))
     print("  ".join("-" * widths[column] for column in columns))

@@ -102,6 +102,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M12 10v4M12 17.2v.1" />
     </svg>
   ),
+  vulnerabilities: (
+    <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
+      <path d="M12 3 5 6v5c0 4.8 2.8 8 7 10 4.2-2 7-5.2 7-10V6l-7-3Z" />
+      <path d="M9 10h6M10 7.8l.8 2.2M14 7.8l-.8 2.2M9.5 13.5h5M12 10v7" />
+    </svg>
+  ),
   remediations: (
     <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
       <path d="m14.5 6.5 3-3 3 3-3 3M13 8l-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11" />
@@ -157,6 +163,7 @@ const GROUPS: { title: string; links: NavLink[] }[] = [
       { href: '/rum', label: 'RUM e sintéticos', description: 'Usuários e uptime', icon: 'rum' },
       { href: '/gcp', label: 'GCP Monitoring', description: 'Métricas e logging', icon: 'gcp' },
       { href: '/alerts', label: 'Alertas', description: 'Incidentes abertos', icon: 'alerts', badge: '23' },
+      { href: '/vulnerabilities', label: 'Vulnerabilidades', description: 'Cloud e on-premises', icon: 'vulnerabilities' },
       { href: '/remediations', label: 'Remediações', description: 'Diagnóstico e correção', icon: 'remediations' },
     ],
   },

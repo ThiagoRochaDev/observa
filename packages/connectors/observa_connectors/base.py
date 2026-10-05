@@ -66,11 +66,38 @@ class LogSignal:
 
 
 @dataclass
+class VulnerabilitySignal:
+    """observa.vulnerability.v1"""
+
+    external_id: str
+    source: str
+    provider: str
+    resource_id: str
+    title: str
+    severity: str
+    detected_at: datetime
+    asset_type: str | None = None
+    description: str | None = None
+    cve: str | None = None
+    cvss: float | None = None
+    package_name: str | None = None
+    installed_version: str | None = None
+    fixed_version: str | None = None
+    product: str | None = None
+    environment: str | None = None
+    status: str = "open"
+    exploitable: bool = False
+    internet_exposed: bool = False
+    labels: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class PullResult:
     costs: list[CostSignal] = field(default_factory=list)
     resources: list[ResourceSignal] = field(default_factory=list)
     metrics: list[MetricSignal] = field(default_factory=list)
     logs: list[LogSignal] = field(default_factory=list)
+    vulnerabilities: list[VulnerabilitySignal] = field(default_factory=list)
     message: str = ""
 
 
