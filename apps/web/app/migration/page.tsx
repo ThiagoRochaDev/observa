@@ -13,7 +13,7 @@ import {
   type Resource,
 } from '@/lib/api'
 
-const PROVIDERS = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Microsoft Azure' }
+const PROVIDERS = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Microsoft Azure', oci: 'Oracle Cloud' }
 
 const INITIAL_COMPONENTS: MigrationComponent[] = [
   { name: 'Load balancer público', category: 'load_balancer', quantity: 1, usage: { hours: 730, processed_gb: 500 } },
@@ -38,7 +38,7 @@ export default function MigrationPage() {
   const [scenarios, setScenarios] = useState<MigrationScenario[]>([])
   const [scopeType, setScopeType] = useState<MigrationRequest['scope_type']>('custom')
   const [scopeValue, setScopeValue] = useState('')
-  const [targets, setTargets] = useState(['aws', 'gcp', 'azure'])
+  const [targets, setTargets] = useState(['aws', 'gcp', 'azure', 'oci'])
   const [currency, setCurrency] = useState<'BRL' | 'USD'>('BRL')
   const [exchangeRate, setExchangeRate] = useState(5)
   const [commitment, setCommitment] = useState<0 | 12 | 36>(0)
@@ -196,7 +196,7 @@ export default function MigrationPage() {
         <div>
           <span className="migration-eyebrow">FinOps · planejamento de migração</span>
           <h1 className="page-title">Simulador de custo multicloud</h1>
-          <p className="page-sub">Compare recursos, contas, produtos ou arquiteturas completas entre AWS, Google Cloud e Azure.</p>
+          <p className="page-sub">Compare recursos, contas, produtos ou arquiteturas completas entre AWS, Google Cloud, Azure e Oracle Cloud.</p>
         </div>
         <div className="migration-reference"><strong>{catalog?.version || 'Carregando catálogo…'}</strong><span>estimativa de referência, não cotação oficial</span></div>
       </header>

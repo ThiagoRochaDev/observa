@@ -4777,6 +4777,7 @@ textarea {
 .provider-dot.aws { background: #ff9900; box-shadow: 0 0 8px #ff990080; }
 .provider-dot.gcp { background: #4285f4; box-shadow: 0 0 8px #4285f480; }
 .provider-dot.azure { background: #18a5e5; box-shadow: 0 0 8px #18a5e580; }
+.provider-dot.oci { background: #f80000; box-shadow: 0 0 8px #f8000080; }
 .migration-submit { width: 100%; }
 .migration-save { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
 .migration-save input { width: 100%; padding: 7px 9px; }

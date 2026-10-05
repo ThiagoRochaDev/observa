@@ -13,7 +13,12 @@ from app.core.config import get_settings
 
 CACHE_KEY = "migration_official_pricing_cache"
 MAPPINGS_KEY = "migration_official_sku_mappings"
-DEFAULT_REGIONS = {"aws": "sa-east-1", "gcp": "southamerica-east1", "azure": "brazilsouth"}
+DEFAULT_REGIONS = {
+    "aws": "sa-east-1",
+    "gcp": "southamerica-east1",
+    "azure": "brazilsouth",
+    "oci": "sa-saopaulo-1",
+}
 
 
 class PricingUnavailable(RuntimeError):
@@ -21,10 +26,11 @@ class PricingUnavailable(RuntimeError):
 
 
 def get_config() -> dict[str, Any]:
+    saved_regions = db.get_setting("migration_pricing_regions") or {}
     return {
         "mode": get_settings().migration_pricing_mode,
         "cache_hours": get_settings().migration_pricing_cache_hours,
-        "regions": db.get_setting("migration_pricing_regions") or DEFAULT_REGIONS,
+        "regions": {**DEFAULT_REGIONS, **saved_regions},
         "mappings": db.get_setting(MAPPINGS_KEY) or {},
         "gcp_catalog_configured": bool(get_settings().gcp_billing_catalog_api_key),
     }
@@ -139,7 +145,41 @@ def _aws_rate(mapping: dict[str, Any], region: str) -> tuple[float, dict[str, An
     }
 
 
-FETCHERS = {"aws": _aws_rate, "gcp": _gcp_rate, "azure": _azure_rate}
+def _oci_rate(mapping: dict[str, Any], region: str) -> tuple[float, dict[str, Any]]:
+    part_number = mapping.get("part_number") or mapping.get("partNumber")
+    if not part_number:
+        raise PricingUnavailable("OCI mapping requires part_number")
+    endpoint = "https://apexapps.oracle.com/pls/apex/cetools/api/v1/products/"
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
+        response = client.get(endpoint, params={"partNumber": part_number, "currencyCode": "USD"})
+        response.raise_for_status()
+        items = response.json().get("items") or []
+    item = next((row for row in items if row.get("partNumber") == part_number), None)
+    if not item:
+        raise PricingUnavailable(f"OCI part number {part_number} was not found")
+    currency = next((row for row in item.get("prices") or [] if row.get("currencyCode") == "USD"), None)
+    tiers = (currency or {}).get("prices") or []
+    model = mapping.get("model", "PAY_AS_YOU_GO")
+    matching_tiers = [row for row in tiers if row.get("model") == model]
+    if mapping.get("range_min") is not None:
+        matching_tiers = [row for row in matching_tiers if str(row.get("rangeMin")) == str(mapping["range_min"])]
+    if not matching_tiers:
+        raise PricingUnavailable(f"OCI part number {part_number} has no USD {model} price")
+    tier = matching_tiers[0]
+    price = float(tier.get("value") or 0)
+    source_url = f"{endpoint}?partNumber={quote(str(part_number))}&currencyCode=USD"
+    return price * float(mapping.get("multiplier", 1)), {
+        "provider": "oci",
+        "region": region,
+        "sku": part_number,
+        "meter": item.get("displayName"),
+        "unit": item.get("metricName"),
+        "effective_at": None,
+        "source_url": source_url,
+    }
+
+
+FETCHERS = {"aws": _aws_rate, "gcp": _gcp_rate, "azure": _azure_rate, "oci": _oci_rate}
 
 
 def refresh(providers: list[str] | None = None) -> dict[str, Any]:

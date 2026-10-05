@@ -180,7 +180,7 @@ class MigrationComponentInput(BaseModel):
 class MigrationEstimateBody(BaseModel):
     scope_type: str = "product"
     scope_value: str | None = None
-    target_providers: list[str] = Field(default_factory=lambda: ["aws", "gcp", "azure"])
+    target_providers: list[str] = Field(default_factory=lambda: ["aws", "gcp", "azure", "oci"])
     currency: str = "BRL"
     usd_to_brl: float = Field(default=5.0, gt=0)
     commitment_months: int = 0

@@ -193,8 +193,9 @@ an intentional exception, or create shutdown actions that remain pending until a
 them. See [docs/BUDGET_GUARDRAILS.md](docs/BUDGET_GUARDRAILS.md).
 
 The **Multicloud migration** screen normalizes an existing resource, product, account or custom
-architecture and compares equivalent services and SKUs on AWS, Google Cloud and Azure. Production
-mode consumes official provider catalogs and fails closed when a required SKU is unavailable.
+architecture and compares equivalent services and SKUs on AWS, Google Cloud, Azure and Oracle
+Cloud Infrastructure. Production mode consumes official provider catalogs and fails closed when a
+required SKU is unavailable.
 Every result exposes formulas, assumptions, confidence, observed 30-day spend and tenant-isolated
 saved scenarios. Reference prices are planning inputs, not provider quotes. See
 [docs/MULTICLOUD_MIGRATION.md](docs/MULTICLOUD_MIGRATION.md).

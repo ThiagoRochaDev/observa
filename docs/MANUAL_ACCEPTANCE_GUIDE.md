@@ -750,9 +750,9 @@ réplica enquanto o storage for SQLite.
 
 1. Abra **Migração multicloud**.
 2. Mantenha o preset com load balancer, API serverless e bucket.
-3. Marque AWS, Google Cloud e Azure e clique em **Comparar custos**.
+3. Marque AWS, Google Cloud, Azure e Oracle Cloud e clique em **Comparar custos**.
 
-Resultado esperado: três cards ordenados do menor para o maior custo, serviço e SKU equivalente
+Resultado esperado: quatro cards ordenados do menor para o maior custo, serviço e SKU equivalente
 por componente, fórmulas expansíveis, confiança e aviso de que o catálogo é de referência.
 
 ### OBS-MIG-002 — Escopos inventariados
@@ -815,6 +815,19 @@ Resultado esperado: mensagens claras, nenhum cenário parcial e HTTP 400/403 con
 Resultado esperado: o primeiro cálculo informa `catalog_kind=official`, região, SKU, meter,
 vigência e URL oficial; o segundo falha claramente e não reutiliza referência. Em `production`,
 qualquer tentativa de selecionar fallback é recusada.
+
+### OBS-MIG-008 — Oracle Cloud oficial
+
+1. Em `PUT /api/migration/pricing/config`, informe a região `oci=sa-saopaulo-1`.
+2. Mapeie cada métrica OCI com um `part_number` público válido e, se necessário, `model`,
+   `range_min` e `multiplier`.
+3. Execute `python -m observa_cli.main migration estimate --scope custom --architecture arquitetura.json --target oci --official --refresh-prices`.
+4. Repita pela interface marcando somente **Oracle Cloud** e **Exigir somente preços oficiais**.
+5. Substitua um `part_number` por um valor inexistente e repita.
+
+Resultado esperado: a execução válida mostra `provider=oci`, região, B Part Number, métrica,
+unidade, preço em USD e URL da API pública Oracle. A execução inválida falha sem usar o catálogo
+de referência. Nenhuma credencial é necessária para a lista pública da OCI.
 
 Guia funcional e contratos: `docs/MULTICLOUD_MIGRATION.md`.
 

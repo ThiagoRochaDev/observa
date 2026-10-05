@@ -10,8 +10,8 @@ from app.core import db
 from app.core.config import get_settings
 from app.application import official_pricing_service
 
-CATALOG_VERSION = "observa-reference-2026.10-v1"
-SUPPORTED_PROVIDERS = ("aws", "gcp", "azure")
+CATALOG_VERSION = "observa-reference-2026.10-v2"
+SUPPORTED_PROVIDERS = ("aws", "gcp", "azure", "oci")
 
 CATEGORY_LABELS = {
     "compute": "Máquina virtual / compute",
@@ -61,6 +61,15 @@ RATE_CARDS: dict[str, dict[str, dict[str, Any]]] = {
         "object_storage": {"service": "Azure Blob Storage", "sku": "reference.hot-lrs", "rates": {"storage_gb_month": 0.0184, "operations_10k": 0.055, "egress_gb": 0.087}},
         "cache": {"service": "Azure Managed Redis", "sku": "reference.managed-cache", "rates": {"memory_gb_hour": 0.0260, "egress_gb": 0.010}},
     },
+    "oci": {
+        "compute": {"service": "OCI Compute", "sku": "reference.flex-general-purpose", "rates": {"vcpu_hour": 0.0250, "memory_gb_hour": 0.0015, "storage_gb_month": 0.0255, "egress_gb": 0.0085}},
+        "container_platform": {"service": "Oracle Kubernetes Engine + OCI Compute", "sku": "reference.oke-managed", "rates": {"cluster_hour": 0.100, "vcpu_hour": 0.0250, "memory_gb_hour": 0.0015, "storage_gb_month": 0.0255, "egress_gb": 0.0085}},
+        "serverless_container": {"service": "OCI Container Instances / Functions", "sku": "reference.serverless-container", "rates": {"vcpu_hour": 0.0300, "memory_gb_hour": 0.0020, "requests_million": 0.200, "egress_gb": 0.0085}},
+        "database": {"service": "OCI Database", "sku": "reference.relational-managed", "rates": {"vcpu_hour": 0.0500, "memory_gb_hour": 0.0060, "storage_gb_month": 0.085, "backup_gb_month": 0.050, "egress_gb": 0.0085}},
+        "load_balancer": {"service": "OCI Load Balancer", "sku": "reference.flexible-lb", "rates": {"lb_hour": 0.0113, "processed_gb": 0.0080}},
+        "object_storage": {"service": "OCI Object Storage", "sku": "reference.standard", "rates": {"storage_gb_month": 0.0255, "operations_10k": 0.034, "egress_gb": 0.0085}},
+        "cache": {"service": "OCI Cache with Redis", "sku": "reference.managed-cache", "rates": {"memory_gb_hour": 0.0250, "egress_gb": 0.0085}},
+    },
 }
 
 RESOURCE_ALIASES = {
@@ -73,9 +82,12 @@ RESOURCE_ALIASES = {
     "kubernetes": "container_platform",
     "eks": "container_platform",
     "aks": "container_platform",
+    "oke": "container_platform",
     "cloudsql": "database",
     "rds": "database",
     "azure_sql": "database",
+    "autonomous_database": "database",
+    "oracle_database": "database",
     "postgres": "database",
     "mysql": "database",
     "load_balancer": "load_balancer",
@@ -104,7 +116,7 @@ def catalog() -> dict[str, Any]:
         "providers": [
             {
                 "id": provider,
-                "name": {"aws": "AWS", "gcp": "Google Cloud", "azure": "Microsoft Azure"}[provider],
+                "name": {"aws": "AWS", "gcp": "Google Cloud", "azure": "Microsoft Azure", "oci": "Oracle Cloud"}[provider],
                 "categories": [
                     {
                         "id": category,

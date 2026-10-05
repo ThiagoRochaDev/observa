@@ -1,8 +1,8 @@
 # Simulador de custo de migração multicloud
 
-O Observa compara o custo mensal estimado de workloads equivalentes em AWS, Google Cloud e
-Microsoft Azure. A simulação pode partir de um recurso descoberto, um produto, uma conta/cloud
-inteira ou uma arquitetura informada manualmente.
+O Observa compara o custo mensal estimado de workloads equivalentes em AWS, Google Cloud,
+Microsoft Azure e Oracle Cloud Infrastructure (OCI). A simulação pode partir de um recurso
+descoberto, um produto, uma conta/cloud inteira ou uma arquitetura informada manualmente.
 
 ## Objetivo e segurança
 
@@ -19,13 +19,15 @@ oficiais. O cálculo falha se algum provider, categoria ou métrica não possuir
 fallback silencioso. Em desenvolvimento, `official_preferred` tenta o catálogo oficial e identifica
 visivelmente qualquer fallback para o catálogo de referência.
 
-As fontes suportadas são AWS Price List Bulk API, Google Cloud Billing Catalog API e Azure Retail
-Prices API. Cada resultado oficial grava região, SKU/meter, unidade, vigência, URL da fonte,
-`fetched_at` e `expires_at`. O cache padrão é de 24 horas e pode ser renovado manualmente.
+As fontes suportadas são AWS Price List Bulk API, Google Cloud Billing Catalog API, Azure Retail
+Prices API e OCI Public List Pricing API. Cada resultado oficial grava região, SKU/meter, unidade,
+vigência, URL da fonte, `fetched_at` e `expires_at`. O cache padrão é de 24 horas e pode ser
+renovado manualmente.
 
 - AWS: https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/using-the-aws-price-list-bulk-api.html
 - GCP: https://cloud.google.com/billing/v1/how-tos/catalog-api
 - Azure: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
+- OCI: https://docs.oracle.com/en-us/iaas/Content/Billing/Tasks/signingup_topic-Estimating_Costs.htm#Accessing_List_Pricing_for_OCI_Products
 
 ## Escopos
 
@@ -78,10 +80,10 @@ Comparar um produto:
 python -m observa_cli.main migration estimate --scope product --value observa
 ```
 
-Comparar apenas AWS e Azure com compromisso de 12 meses:
+Comparar apenas AWS e Oracle Cloud com compromisso de 12 meses:
 
 ```powershell
-python -m observa_cli.main migration estimate --scope account --value all --target aws --target azure --commitment 12
+python -m observa_cli.main migration estimate --scope account --value all --target aws --target oci --commitment 12
 ```
 
 Salvar uma arquitetura customizada:
@@ -122,11 +124,14 @@ GCP_BILLING_CATALOG_API_KEY=<secret-manager>
 Configure os SKUs exatos por tenancy com `PUT /api/migration/pricing/config`. O mapeamento associa
 cada métrica normalizada a um identificador oficial. AWS requer `service_code`, `sku` e `unit`; GCP
 requer `service_id` e `sku_id`; Azure aceita `meterId`, `skuId` ou a combinação exata de campos da
-Retail Prices API. `multiplier` converte a unidade oficial para a unidade normalizada quando preciso.
+Retail Prices API; OCI requer `part_number` e aceita `model` (padrão `PAY_AS_YOU_GO`) e
+`range_min` para preços em faixa. `multiplier` converte a unidade oficial para a unidade
+normalizada quando preciso. Na OCI, use-o explicitamente quando um preço em OCPU precisar ser
+normalizado para vCPU; para a maioria dos produtos x86, 1 OCPU equivale a 2 vCPUs.
 
 ```json
 {
-  "regions": {"aws":"sa-east-1","gcp":"southamerica-east1","azure":"brazilsouth"},
+  "regions": {"aws":"sa-east-1","gcp":"southamerica-east1","azure":"brazilsouth","oci":"sa-saopaulo-1"},
   "mappings": {
     "azure": {
       "load_balancer": {
@@ -154,10 +159,25 @@ Retail Prices API. `multiplier` converte a unidade oficial para a unidade normal
           "instance_hour": {"service_code":"AmazonEC2","sku":"<SKU>","unit":"Hrs"}
         }
       }
+    },
+    "oci": {
+      "load_balancer": {
+        "service": "OCI Load Balancer",
+        "sku": "Flexible Load Balancer",
+        "metrics": {
+          "lb_hour": {"part_number":"<B_PART_NUMBER_OFICIAL>","model":"PAY_AS_YOU_GO","multiplier":1}
+        }
+      }
     }
   }
 }
 ```
+
+A API pública da OCI retorna preço de lista global em USD por B Part Number e não publica uma
+data de vigência nesse payload; por isso, `effective_at` fica vazio e `fetched_at` registra a coleta. O Observa mantém
+`sa-saopaulo-1` no resultado para registrar a região de destino da simulação, mas não inventa um
+ajuste regional quando o catálogo público não o fornece. Configure todos os B Part Numbers usados
+pelas métricas da arquitetura; em modo oficial, qualquer ausência encerra o cálculo com erro.
 
 Os IDs devem ser obtidos do catálogo da conta/região alvo e revisados quando a arquitetura mudar.
 Descontos privados não aparecem nos catálogos públicos; para eles, importe uma tabela contratual
@@ -170,5 +190,5 @@ cadastre cenários separados com os SKUs oficiais do termo correspondente.
 ## Evolução para preços contratuais
 
 Os catálogos públicos oficiais já são suportados. O próximo nível é integrar AWS Private Pricing,
-Google Cloud Pricing API vinculada à billing account e exports Azure com preços negociados. Essas
-fontes devem sobrescrever somente SKUs correspondentes e manter origem, vigência e auditoria.
+Google Cloud Pricing API vinculada à billing account, exports Azure e rate cards contratuais OCI.
+Essas fontes devem sobrescrever somente SKUs correspondentes e manter origem, vigência e auditoria.

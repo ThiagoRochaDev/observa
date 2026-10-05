@@ -135,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migration_estimate.add_argument("--value", help="Resource UID, product slug or account/provider")
     migration_estimate.add_argument(
-        "--target", action="append", choices=["aws", "gcp", "azure"], default=[]
+        "--target", action="append", choices=["aws", "gcp", "azure", "oci"], default=[]
     )
     migration_estimate.add_argument("--currency", choices=["BRL", "USD"], default="BRL")
     migration_estimate.add_argument("--usd-to-brl", type=float, default=5.0)
@@ -294,7 +294,7 @@ def dispatch(client: Client, args: argparse.Namespace) -> Any:
         payload = {
             "scope_type": args.scope,
             "scope_value": args.value,
-            "target_providers": args.target or ["aws", "gcp", "azure"],
+            "target_providers": args.target or ["aws", "gcp", "azure", "oci"],
             "currency": args.currency,
             "usd_to_brl": args.usd_to_brl,
             "commitment_months": args.commitment,

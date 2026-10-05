@@ -1,7 +1,7 @@
 def custom_payload():
     return {
         "scope_type": "custom",
-        "target_providers": ["aws", "gcp", "azure"],
+        "target_providers": ["aws", "gcp", "azure", "oci"],
         "currency": "BRL",
         "usd_to_brl": 5.0,
         "components": [
@@ -35,7 +35,7 @@ def test_migration_catalog_exposes_supported_clouds_and_categories(client):
     assert response.status_code == 200
     body = response.json()
     assert body["kind"] == "reference"
-    assert {provider["id"] for provider in body["providers"]} == {"aws", "gcp", "azure"}
+    assert {provider["id"] for provider in body["providers"]} == {"aws", "gcp", "azure", "oci"}
     assert all(len(provider["categories"]) == 7 for provider in body["providers"])
     assert "catálogos oficiais" in body["notice"]
 
@@ -46,9 +46,9 @@ def test_custom_architecture_compares_cloud_services_and_formulas(client):
     body = response.json()
     assert body["scope"] == {"type": "custom", "value": None}
     assert body["observed_current"]["amount"] == 0
-    assert len(body["comparisons"]) == 3
+    assert len(body["comparisons"]) == 4
     assert body["cheapest_provider"] == body["comparisons"][0]["provider"]
-    assert {row["provider"] for row in body["comparisons"]} == {"aws", "gcp", "azure"}
+    assert {row["provider"] for row in body["comparisons"]} == {"aws", "gcp", "azure", "oci"}
     assert all(len(row["services"]) == 3 for row in body["comparisons"])
     assert all(service["sku"].startswith("reference.") for row in body["comparisons"] for service in row["services"])
     assert any(line["formula"] for row in body["comparisons"] for service in row["services"] for line in service["lines"])
@@ -191,3 +191,55 @@ def test_official_catalog_rates_are_used_and_traced(client, monkeypatch):
             "mappings": {},
         },
     )
+
+
+def test_oci_public_price_list_parser(monkeypatch):
+    from app.application import official_pricing_service
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "items": [
+                    {
+                        "partNumber": "B12345",
+                        "displayName": "OCI Load Balancer Base",
+                        "metricName": "Load Balancer Hour",
+                        "serviceCategory": "Networking",
+                        "prices": [
+                            {
+                                "currencyCode": "USD",
+                                "prices": [{"model": "PAY_AS_YOU_GO", "value": 0.0113}],
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url, params):
+            assert params == {"partNumber": "B12345", "currencyCode": "USD"}
+            return FakeResponse()
+
+    monkeypatch.setattr(official_pricing_service.httpx, "Client", FakeClient)
+    rate, source = official_pricing_service._oci_rate(
+        {"part_number": "B12345", "model": "PAY_AS_YOU_GO", "multiplier": 2},
+        "sa-saopaulo-1",
+    )
+    assert round(rate, 4) == 0.0226
+    assert source["provider"] == "oci"
+    assert source["region"] == "sa-saopaulo-1"
+    assert source["sku"] == "B12345"
+    assert source["unit"] == "Load Balancer Hour"
+    assert "partNumber=B12345" in source["source_url"]
