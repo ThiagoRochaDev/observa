@@ -127,6 +127,27 @@ def build_parser() -> argparse.ArgumentParser:
     budget_delete = budgets_sub.add_parser("delete")
     budget_delete.add_argument("rule_id")
 
+    migration = commands.add_parser("migration", help="Compare multicloud migration costs")
+    migration_sub = migration.add_subparsers(dest="operation", required=True)
+    migration_estimate = migration_sub.add_parser("estimate")
+    migration_estimate.add_argument(
+        "--scope", default="product", choices=["resource", "product", "account", "custom"]
+    )
+    migration_estimate.add_argument("--value", help="Resource UID, product slug or account/provider")
+    migration_estimate.add_argument(
+        "--target", action="append", choices=["aws", "gcp", "azure"], default=[]
+    )
+    migration_estimate.add_argument("--currency", choices=["BRL", "USD"], default="BRL")
+    migration_estimate.add_argument("--usd-to-brl", type=float, default=5.0)
+    migration_estimate.add_argument("--commitment", type=int, choices=[0, 12, 36], default=0)
+    migration_estimate.add_argument(
+        "--architecture", help="JSON file containing a component list for custom scope"
+    )
+    migration_estimate.add_argument("--save", metavar="NAME", help="Save the scenario in this tenancy")
+    migration_sub.add_parser("scenarios")
+    migration_delete = migration_sub.add_parser("delete")
+    migration_delete.add_argument("scenario_id")
+
     remediations = commands.add_parser("remediations")
     remediation_sub = remediations.add_subparsers(dest="operation", required=True)
     remediation_sub.add_parser("list")
@@ -255,6 +276,34 @@ def dispatch(client: Client, args: argparse.Namespace) -> Any:
         return client.request("GET", f"/api/budgets/events{query}")
     if args.command == "budgets" and args.operation == "delete":
         return client.request("DELETE", f"/api/budgets/{args.rule_id}")
+    if args.command == "migration" and args.operation == "estimate":
+        components: list[dict[str, Any]] = []
+        if args.architecture:
+            with open(args.architecture, encoding="utf-8") as architecture_file:
+                loaded = json.load(architecture_file)
+            components = loaded.get("components", loaded) if isinstance(loaded, dict) else loaded
+            if not isinstance(components, list):
+                raise ValueError("Architecture JSON must be a list or contain a components list")
+        if args.scope == "custom" and not components:
+            raise ValueError("Custom scope requires --architecture FILE.json")
+        if args.scope != "custom" and not args.value:
+            raise ValueError("Resource, product and account scopes require --value")
+        payload = {
+            "scope_type": args.scope,
+            "scope_value": args.value,
+            "target_providers": args.target or ["aws", "gcp", "azure"],
+            "currency": args.currency,
+            "usd_to_brl": args.usd_to_brl,
+            "commitment_months": args.commitment,
+            "components": components,
+        }
+        if args.save:
+            return client.request("POST", "/api/migration/scenarios", {"name": args.save, **payload})
+        return client.request("POST", "/api/migration/estimate", payload)
+    if args.command == "migration" and args.operation == "scenarios":
+        return client.request("GET", "/api/migration/scenarios")
+    if args.command == "migration" and args.operation == "delete":
+        return client.request("DELETE", f"/api/migration/scenarios/{args.scenario_id}")
     if args.command == "remediations" and args.operation == "list":
         return client.request("GET", "/api/remediations")
     if args.command == "remediations" and args.operation == "analyze":

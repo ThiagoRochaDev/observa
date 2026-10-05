@@ -194,6 +194,14 @@ export const api = {
     }),
   costSummary: (days = 30) => req<CostSummary>(`/api/costs/summary?days=${days}`),
   costTrend: (days = 30) => req<TrendPoint[]>(`/api/costs/trend?days=${days}`),
+  migrationCatalog: () => req<MigrationCatalog>('/api/migration/catalog'),
+  migrationEstimate: (body: MigrationRequest) =>
+    req<MigrationEstimate>('/api/migration/estimate', { method: 'POST', body: JSON.stringify(body) }),
+  migrationScenarios: () => req<MigrationScenario[]>('/api/migration/scenarios'),
+  createMigrationScenario: (body: MigrationRequest & { name: string }) =>
+    req<MigrationScenario>('/api/migration/scenarios', { method: 'POST', body: JSON.stringify(body) }),
+  deleteMigrationScenario: (id: string) =>
+    req<{ ok: boolean }>(`/api/migration/scenarios/${id}`, { method: 'DELETE' }),
   budgets: () => req<BudgetRule[]>('/api/budgets'),
   createBudget: (body: Omit<BudgetRule, 'id' | 'created_at' | 'updated_at'>) =>
     req<BudgetRule>('/api/budgets', { method: 'POST', body: JSON.stringify(body) }),
@@ -404,6 +412,104 @@ export type TrendPoint = {
   aws?: number
   datadog?: number
   gitlab?: number
+}
+
+export type MigrationCategory = {
+  id: string
+  label: string
+  service: string
+  sku: string
+  rates: Record<string, number>
+}
+
+export type MigrationCatalog = {
+  version: string
+  currency: string
+  kind: 'reference'
+  notice: string
+  providers: { id: string; name: string; categories: MigrationCategory[] }[]
+  default_usage: Record<string, Record<string, number>>
+}
+
+export type MigrationComponent = {
+  name: string
+  category: string
+  quantity?: number
+  source_provider?: string | null
+  source_service?: string | null
+  usage: Record<string, number>
+}
+
+export type MigrationRequest = {
+  scope_type: 'resource' | 'product' | 'account' | 'custom'
+  scope_value?: string | null
+  target_providers: string[]
+  currency: 'BRL' | 'USD'
+  usd_to_brl: number
+  commitment_months: 0 | 12 | 36
+  components?: MigrationComponent[]
+}
+
+export type MigrationServiceEstimate = {
+  component: string
+  category: string
+  service: string
+  sku: string
+  usage: Record<string, number>
+  lines: {
+    metric: string
+    units: number
+    unit_price_usd: number
+    amount_usd: number
+    formula: string
+  }[]
+  subtotal_usd: number
+  commitment_discount_pct: number
+  monthly_usd: number
+}
+
+export type MigrationEstimate = {
+  id: string
+  calculated_at: string
+  catalog_version: string
+  catalog_kind: 'reference'
+  scope: { type: string; value?: string | null }
+  currency: 'BRL' | 'USD'
+  usd_to_brl: number
+  commitment_months: number
+  observed_current: {
+    amount: number
+    currency?: string | null
+    period_days: number
+    normalized_amount?: number | null
+    normalized_currency: string
+  }
+  components: (MigrationComponent & { confidence: number; warnings: string[]; resource_uid?: number | null })[]
+  comparisons: {
+    provider: string
+    monthly_usd: number
+    monthly_cost: number
+    currency: string
+    difference_vs_observed?: number | null
+    savings_pct_vs_observed?: number | null
+    services: MigrationServiceEstimate[]
+  }[]
+  cheapest_provider: string
+  confidence: number
+  warnings: string[]
+}
+
+export type MigrationScenario = {
+  id: string
+  name: string
+  scope_type: string
+  scope_value?: string | null
+  currency: string
+  catalog_version: string
+  request: MigrationRequest
+  result: MigrationEstimate
+  created_by: string
+  created_at: string
 }
 
 export type BudgetRule = {

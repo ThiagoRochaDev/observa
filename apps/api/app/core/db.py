@@ -314,6 +314,19 @@ def init_db() -> None:
                   created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS migration_scenarios (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  scope_type TEXT NOT NULL,
+                  scope_value TEXT,
+                  currency TEXT NOT NULL,
+                  catalog_version TEXT NOT NULL,
+                  request_json TEXT NOT NULL,
+                  result_json TEXT NOT NULL,
+                  created_by TEXT NOT NULL,
+                  created_at TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_cost_date ON cost_records(date);
                 CREATE INDEX IF NOT EXISTS idx_cost_product ON cost_records(product);
                 CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(name);
@@ -326,6 +339,7 @@ def init_db() -> None:
                 CREATE INDEX IF NOT EXISTS idx_actions_status ON action_runs(status);
                 CREATE INDEX IF NOT EXISTS idx_actions_scheduled ON action_runs(scheduled_for);
                 CREATE INDEX IF NOT EXISTS idx_budget_events_rule ON budget_events(rule_id);
+                CREATE INDEX IF NOT EXISTS idx_migration_scenarios_created ON migration_scenarios(created_at);
                 """
             )
             action_columns = {
@@ -1128,6 +1142,88 @@ def cost_trend(days: int = 30) -> list[dict]:
         slot[r["provider"]] = r["s"]
         slot["total"] = round(slot["total"] + r["s"], 2)
     return list(by_day.values())
+
+
+def migration_observed_cost(
+    scope_type: str, scope_value: str, resources: list[dict[str, Any]]
+) -> dict[str, Any]:
+    if scope_type == "custom":
+        return {"amount": 0.0, "currency": None, "period_days": 30}
+    where = "date >= date('now', '-30 days')"
+    params: list[Any] = []
+    if scope_type == "resource" and resources:
+        where += " AND resource_id = ?"
+        params.append(resources[0]["id"])
+    elif scope_type == "product":
+        where += " AND product = ?"
+        params.append(scope_value)
+    elif scope_type == "account" and scope_value.lower() not in {"", "all", "*"}:
+        where += " AND (account = ? OR provider = ?)"
+        params.extend([scope_value, scope_value])
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT currency, ROUND(SUM(amount), 2) AS total FROM cost_records WHERE {where} GROUP BY currency ORDER BY total DESC",
+            params,
+        ).fetchall()
+    if not rows:
+        return {"amount": 0.0, "currency": None, "period_days": 30}
+    return {
+        "amount": float(rows[0]["total"]),
+        "currency": rows[0]["currency"],
+        "period_days": 30,
+        "additional_currencies": [
+            {"currency": row["currency"], "amount": float(row["total"])} for row in rows[1:]
+        ],
+    }
+
+
+def create_migration_scenario(row: dict[str, Any]) -> dict[str, Any]:
+    created_at = datetime.utcnow().isoformat() + "Z"
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO migration_scenarios(id, name, scope_type, scope_value, currency, "
+            "catalog_version, request_json, result_json, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                row["id"], row["name"], row["scope_type"], row.get("scope_value"),
+                row["currency"], row["catalog_version"], json.dumps(row["request"]),
+                json.dumps(row["result"]), row["created_by"], created_at,
+            ),
+        )
+    return get_migration_scenario(row["id"]) or {}
+
+
+def _migration_scenario_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "scope_type": row["scope_type"],
+        "scope_value": row["scope_value"],
+        "currency": row["currency"],
+        "catalog_version": row["catalog_version"],
+        "request": json.loads(row["request_json"]),
+        "result": json.loads(row["result_json"]),
+        "created_by": row["created_by"],
+        "created_at": row["created_at"],
+    }
+
+
+def get_migration_scenario(scenario_id: str) -> dict[str, Any] | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM migration_scenarios WHERE id = ?", (scenario_id,)).fetchone()
+    return _migration_scenario_dict(row) if row else None
+
+
+def list_migration_scenarios() -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM migration_scenarios ORDER BY created_at DESC").fetchall()
+    return [_migration_scenario_dict(row) for row in rows]
+
+
+def delete_migration_scenario(scenario_id: str) -> bool:
+    with db() as conn:
+        cursor = conn.execute("DELETE FROM migration_scenarios WHERE id = ?", (scenario_id,))
+    return bool(cursor.rowcount)
 
 
 def list_products() -> list[dict]:

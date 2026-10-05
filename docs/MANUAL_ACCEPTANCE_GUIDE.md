@@ -744,11 +744,73 @@ Resultado esperado: erro e p95 abaixo dos limites definidos para o ambiente.
 Resultado esperado: web continua disponível. Não aumente a API acima de uma
 réplica enquanto o storage for SQLite.
 
-## 27. Vídeo completo
+## 27. Migração multicloud
+
+### OBS-MIG-001 — Catálogo e comparação customizada
+
+1. Abra **Migração multicloud**.
+2. Mantenha o preset com load balancer, API serverless e bucket.
+3. Marque AWS, Google Cloud e Azure e clique em **Comparar custos**.
+
+Resultado esperado: três cards ordenados do menor para o maior custo, serviço e SKU equivalente
+por componente, fórmulas expansíveis, confiança e aviso de que o catálogo é de referência.
+
+### OBS-MIG-002 — Escopos inventariados
+
+1. Simule um único recurso do inventário.
+2. Simule o produto fictício `observa`.
+3. Simule a conta/cloud `all` e depois somente `gcp`.
+
+Resultado esperado: componentes são descobertos automaticamente; labels conhecidos alteram as
+premissas e labels ausentes geram aviso de defaults. O produto exibe custo observado de 30 dias.
+
+### OBS-MIG-003 — Moeda e compromisso
+
+1. Execute em BRL com câmbio `5,00`.
+2. Troque para USD.
+3. Compare sob demanda, 12 e 36 meses.
+
+Resultado esperado: moeda muda sem perder o total base em USD; compromissos aplicam os descontos
+de referência informados e todas as premissas permanecem visíveis.
+
+### OBS-MIG-004 — Persistência e isolamento
+
+1. Salve um cenário na tenancy Produção.
+2. Troque para Sandbox.
+3. Confirme que o cenário não aparece.
+4. Volte a Produção, carregue e exclua o cenário.
+
+Resultado esperado: o cenário só existe na tenancy de origem e pode ser carregado e removido por
+um usuário com papel de operator ou superior.
+
+### OBS-MIG-005 — CLI
+
+```powershell
+cd apps/cli
+python -m observa_cli.main migration estimate --scope product --value observa
+python -m observa_cli.main migration estimate --scope custom --architecture arquitetura.json --save "Teste CLI"
+python -m observa_cli.main migration scenarios
+```
+
+Resultado esperado: resposta contém `catalog_version`, `components`, `comparisons`,
+`cheapest_provider`, `confidence` e `warnings`; o cenário fica visível também na web.
+
+### OBS-MIG-006 — Validações negativas
+
+1. Desmarque todas as clouds.
+2. Informe JSON inválido no consumo.
+3. Use um UID inexistente.
+4. Tente salvar como viewer.
+
+Resultado esperado: mensagens claras, nenhum cenário parcial e HTTP 400/403 conforme o caso.
+
+Guia funcional e contratos: `docs/MULTICLOUD_MIGRATION.md`.
+
+## 28. Vídeo completo
 
 Para revisar rapidamente todas as áreas, abra:
 
-`docs/DEMO_MEDIA_POLICY.md` (a gravação anterior foi retirada; valide apenas novas capturas revisadas com dados sintéticos TGR)
+`docs/demo/observa-complete-walkthrough.mp4`
 
 Para regenerar com dados demo:
 
@@ -759,10 +821,10 @@ python scripts/render_demo_video.py
 Remove-Item Env:OBSERVA_DEMO_API_KEY
 ```
 
-Resultado esperado: 27 cenas, aproximadamente 89 segundos, H.264, 1440×900,
+Resultado esperado: vídeo H.264, 1440×900, incluindo a tela de migração multicloud,
 sem token ou credencial visível.
 
-## 28. Evidências e aceite final
+## 29. Evidências e aceite final
 
 Para cada cenário, registre:
 

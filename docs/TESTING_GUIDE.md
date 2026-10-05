@@ -11,9 +11,9 @@ autenticação e testes automatizados.
 
 | Camada | Funcionalidades |
 |---|---|
-| API FastAPI | autenticação por API key, catálogo, custos, inventário, métricas, alertas e governança |
+| API FastAPI | autenticação por API key, catálogo, custos, inventário, métricas, alertas, governança e migração multicloud |
 | Banco SQLite | conexões, recursos, custos, métricas, políticas, ações e auditoria |
-| Web Next.js | todas as telas do menu e fluxos de conexão/governança |
+| Web Next.js | todas as telas do menu e fluxos de conexão/governança/migração |
 | Conectores | teste de credencial, sincronização e capacidades declaradas |
 | CLI | inventário, tags, políticas, execução e aprovações |
 | Mobile Expo | custos, recursos sem mapeamento e aprovações |

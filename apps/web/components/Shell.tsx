@@ -50,6 +50,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M16 8.5c-.8-.7-2-1-3.4-1-1.9 0-3.1.8-3.1 2s1.1 1.8 3.1 2.2 3.3.8 3.3 2.4-1.4 2.4-3.5 2.4c-1.5 0-2.9-.4-3.8-1.2M12 5.5v13" />
     </svg>
   ),
+  migration: (
+    <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
+      <path d="M4 7h11M12 4l3 3-3 3M20 17H9M12 14l-3 3 3 3" />
+      <path d="M4 17h2M18 7h2" />
+    </svg>
+  ),
   dashboards: (
     <svg width="20" height="20" viewBox="0 0 24 24" {...ICON_STROKE}>
       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -136,6 +142,7 @@ const GROUPS: { title: string; links: NavLink[] }[] = [
       { href: '/maps', label: 'Mapa do ecossistema', description: 'Topologia viva', icon: 'maps' },
       { href: '/inventory', label: 'Inventário', description: 'Recursos conectados', icon: 'inventory', badge: '312' },
       { href: '/budgets', label: 'Budgets', description: 'Limites e projeções', icon: 'budgets' },
+      { href: '/migration', label: 'Migração multicloud', description: 'Comparador de custos', icon: 'migration' },
       { href: '/governance', label: 'Governança', description: 'Tags e aprovações', icon: 'governance' },
     ],
   },

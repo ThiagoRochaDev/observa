@@ -6,7 +6,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from app.application import budget_service, governance_service, remediation_service, sync_service
+from app.application import (
+    budget_service,
+    governance_service,
+    migration_service,
+    remediation_service,
+    sync_service,
+)
 from app.core import db
 from app.core.crypto import encrypt_json
 from app.core.security import require_api_key
@@ -159,6 +165,29 @@ class BudgetRuleUpdate(BaseModel):
 
 class BudgetEvaluateBody(BaseModel):
     at: date | None = None
+
+
+class MigrationComponentInput(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    category: str
+    quantity: float = Field(default=1, gt=0)
+    source_provider: str | None = None
+    source_service: str | None = None
+    usage: dict[str, float] = Field(default_factory=dict)
+
+
+class MigrationEstimateBody(BaseModel):
+    scope_type: str = "product"
+    scope_value: str | None = None
+    target_providers: list[str] = Field(default_factory=lambda: ["aws", "gcp", "azure"])
+    currency: str = "BRL"
+    usd_to_brl: float = Field(default=5.0, gt=0)
+    commitment_months: int = 0
+    components: list[MigrationComponentInput] = Field(default_factory=list)
+
+
+class MigrationScenarioCreate(MigrationEstimateBody):
+    name: str = Field(min_length=1, max_length=120)
 
 
 class LogEventInput(BaseModel):
@@ -440,6 +469,43 @@ def costs_summary(days: int = 30):
 @router.get("/costs/trend")
 def costs_trend(days: int = 30):
     return db.cost_trend(days)
+
+
+@router.get("/migration/catalog")
+def migration_catalog():
+    return migration_service.catalog()
+
+
+@router.post("/migration/estimate")
+def migration_estimate(body: MigrationEstimateBody):
+    try:
+        return migration_service.estimate(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/migration/scenarios")
+def migration_scenarios():
+    return db.list_migration_scenarios()
+
+
+@router.post("/migration/scenarios", dependencies=[Depends(require_tenancy_operator)])
+def create_migration_scenario(
+    body: MigrationScenarioCreate,
+    actor: dict = Depends(require_api_key),
+):
+    try:
+        payload = body.model_dump(exclude={"name"})
+        return migration_service.create_scenario(body.name, payload, actor["subject"])
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.delete("/migration/scenarios/{scenario_id}", dependencies=[Depends(require_tenancy_operator)])
+def delete_migration_scenario(scenario_id: str):
+    if not db.delete_migration_scenario(scenario_id):
+        raise HTTPException(404, "Migration scenario not found")
+    return {"ok": True}
 
 
 @router.get("/budgets")

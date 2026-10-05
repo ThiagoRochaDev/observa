@@ -40,7 +40,7 @@ def title_frame(page: Page, filename: str, eyebrow: str, title: str, body: str) 
 
 def capture_page(page: Page, filename: str, path: str) -> None:
     verify_demo_source(BASE_URL, os.getenv("OBSERVA_API_URL", "http://127.0.0.1:8080"), os.environ["OBSERVA_DEMO_API_KEY"])
-    page.goto(f"{BASE_URL}{path}", wait_until="networkidle")
+    page.goto(f"{BASE_URL}{path}", wait_until="domcontentloaded")
     page.wait_for_timeout(900)
     page.screenshot(path=FRAMES / filename)
 
@@ -128,6 +128,7 @@ def main() -> None:
             ("020-products.png", "/products"),
             ("030-inventory.png", "/inventory"),
             ("040-budgets.png", "/budgets"),
+            ("045-migration.png", "/migration"),
             ("050-governance.png", "/governance"),
             ("060-connections.png", "/connections"),
             ("070-alerts.png", "/alerts"),
@@ -146,26 +147,26 @@ def main() -> None:
         for filename, path in routes:
             capture_page(page, filename, path)
 
-        page.goto(f"{BASE_URL}/", wait_until="networkidle")
+        page.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
         search = page.get_by_placeholder("Qual serviço você deseja acessar?")
         search.fill("conexões")
         page.wait_for_timeout(500)
         page.screenshot(path=FRAMES / "015-global-search.png")
 
-        page.goto(f"{BASE_URL}/connections", wait_until="networkidle")
+        page.goto(f"{BASE_URL}/connections", wait_until="domcontentloaded")
         page.get_by_placeholder("Buscar conectores…").fill("GitHub")
         page.wait_for_timeout(500)
         page.get_by_text("GitHub", exact=True).first.click()
         page.wait_for_timeout(500)
         page.screenshot(path=FRAMES / "065-github-connector.png")
 
-        page.goto(f"{BASE_URL}/dashboards", wait_until="networkidle")
+        page.goto(f"{BASE_URL}/dashboards", wait_until="domcontentloaded")
         dashboard = page.locator("a[href^='/dashboards/']").first
         dashboard_href = dashboard.get_attribute("href")
         if dashboard_href:
             capture_page(page, "085-dashboard-detail.png", dashboard_href)
 
-        page.goto(f"{BASE_URL}/products", wait_until="networkidle")
+        page.goto(f"{BASE_URL}/products", wait_until="domcontentloaded")
         product = page.locator("a[href^='/products/']").first
         product_href = product.get_attribute("href")
         if product_href:

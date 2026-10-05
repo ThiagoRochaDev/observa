@@ -26,6 +26,7 @@ Observa is self-hosted / local-first and multi-cloud by design — bring your ow
 - [Supported connectors](#supported-connectors)
 - [Governance, CLI and mobile](#governance-cli-and-mobile)
 - [Budget guardrails](docs/BUDGET_GUARDRAILS.md)
+- [Multicloud migration cost simulator](docs/MULTICLOUD_MIGRATION.md)
 - [Companies and tenancies](docs/MULTITENANCY.md)
 - [Portable deployment](docs/DEPLOYMENT.md)
 - [Privacy and isolation](docs/PRIVACY_SECURITY.md)
@@ -190,6 +191,12 @@ scheduler contract and connector support.
 Cost limits and projected-spend guardrails are available in **Budgets**. Rules can notify, record
 an intentional exception, or create shutdown actions that remain pending until an owner approves
 them. See [docs/BUDGET_GUARDRAILS.md](docs/BUDGET_GUARDRAILS.md).
+
+The **Multicloud migration** screen normalizes an existing resource, product, account or custom
+architecture and compares equivalent reference services and SKUs on AWS, Google Cloud and Azure.
+Every result exposes formulas, assumptions, confidence, observed 30-day spend and tenant-isolated
+saved scenarios. Reference prices are planning inputs, not provider quotes. See
+[docs/MULTICLOUD_MIGRATION.md](docs/MULTICLOUD_MIGRATION.md).
 
 ## Architecture
 
