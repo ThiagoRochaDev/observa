@@ -42,6 +42,7 @@ export default function MigrationPage() {
   const [currency, setCurrency] = useState<'BRL' | 'USD'>('BRL')
   const [exchangeRate, setExchangeRate] = useState(5)
   const [commitment, setCommitment] = useState<0 | 12 | 36>(0)
+  const [requireOfficial, setRequireOfficial] = useState(false)
   const [components, setComponents] = useState(INITIAL_COMPONENTS)
   const [usageDrafts, setUsageDrafts] = useState(INITIAL_COMPONENTS.map((row) => JSON.stringify(row.usage, null, 2)))
   const [result, setResult] = useState<MigrationEstimate | null>(null)
@@ -93,6 +94,7 @@ export default function MigrationPage() {
       usd_to_brl: exchangeRate,
       commitment_months: commitment,
       components: parsedComponents,
+      pricing_mode: requireOfficial ? 'official' : 'official_preferred',
     }
   }
 
@@ -119,6 +121,21 @@ export default function MigrationPage() {
       setResult(created.result)
       setMessage('Cenário salvo com isolamento nesta tenancy.')
       await refreshScenarios()
+    } catch (cause) {
+      setError(errorMessage(cause))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function refreshOfficialPricing() {
+    setLoading(true)
+    setError('')
+    try {
+      const refreshed = await api.refreshMigrationPricing()
+      const sourceCount = refreshed.sources.length
+      const failures = Object.values(refreshed.errors).flat().length
+      setMessage(`${sourceCount} preço(s) oficial(is) atualizado(s); ${failures} falha(s) de mapeamento.`)
     } catch (cause) {
       setError(errorMessage(cause))
     } finally {
@@ -165,6 +182,7 @@ export default function MigrationPage() {
     setCurrency(request.currency)
     setExchangeRate(request.usd_to_brl)
     setCommitment(request.commitment_months)
+    setRequireOfficial(request.pricing_mode === 'official')
     setComponents(request.components || [])
     setUsageDrafts((request.components || []).map((row) => JSON.stringify(row.usage, null, 2)))
     setScenarioName(scenario.name)
@@ -224,6 +242,8 @@ export default function MigrationPage() {
           <label className="migration-field">Moeda<select value={currency} onChange={(event) => setCurrency(event.target.value as 'BRL' | 'USD')}><option value="BRL">BRL</option><option value="USD">USD</option></select></label>
           <label className="migration-field">Câmbio USD → BRL<input type="number" min="0.01" step="0.01" value={exchangeRate} onChange={(event) => setExchangeRate(Number(event.target.value))} /></label>
           <label className="migration-field">Compromisso<select value={commitment} onChange={(event) => setCommitment(Number(event.target.value) as 0 | 12 | 36)}><option value={0}>Sob demanda</option><option value={12}>12 meses</option><option value={36}>36 meses</option></select></label>
+          <label className="migration-check"><input type="checkbox" checked={requireOfficial} onChange={(event) => setRequireOfficial(event.target.checked)} />Exigir somente preços oficiais</label>
+          <button className="btn" type="button" onClick={refreshOfficialPricing} disabled={loading}>Atualizar catálogos oficiais</button>
           <button className="btn btn-primary migration-submit" type="submit" disabled={loading}>{loading ? 'Calculando…' : 'Comparar custos'}</button>
           <div className="migration-save"><input value={scenarioName} onChange={(event) => setScenarioName(event.target.value)} placeholder="Nome do cenário" /><button className="btn" type="button" onClick={saveScenario} disabled={loading}>Salvar cenário</button></div>
           <p className="migration-note">Nenhuma migração ou alteração de infraestrutura é executada por esta tela.</p>
@@ -231,7 +251,7 @@ export default function MigrationPage() {
       </form>
 
       {result && <section className="migration-results">
-        <div className="migration-result-head"><div><span className="migration-eyebrow">Resultado mensal estimado</span><h2>{result.components.length} componente(s) comparado(s)</h2></div><div className="migration-confidence">Confiança dos dados <strong>{Math.round(result.confidence * 100)}%</strong></div></div>
+        <div className="migration-result-head"><div><span className="migration-eyebrow">Resultado mensal estimado</span><h2>{result.components.length} componente(s) comparado(s)</h2></div><div className="migration-confidence"><span className={`badge ${result.pricing.kind === 'official' ? 'ok' : 'medium'}`}>{result.pricing.kind === 'official' ? 'preços oficiais' : 'referência / fallback'}</span> Confiança dos dados <strong>{Math.round(result.confidence * 100)}%</strong></div></div>
         <div className="migration-cloud-grid">{result.comparisons.map((comparison, index) => <article className={`migration-cloud card ${index === 0 ? 'winner' : ''}`} key={comparison.provider}>
           <div className="migration-cloud-title"><div><span className={`provider-dot ${comparison.provider}`} /><strong>{PROVIDERS[comparison.provider as keyof typeof PROVIDERS]}</strong></div>{index === 0 && <span className="badge ok">menor estimativa</span>}</div>
           <div className="migration-price">{formatMoney(comparison.monthly_cost, comparison.currency)}<small>/ mês</small></div>

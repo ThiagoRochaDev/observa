@@ -195,6 +195,9 @@ export const api = {
   costSummary: (days = 30) => req<CostSummary>(`/api/costs/summary?days=${days}`),
   costTrend: (days = 30) => req<TrendPoint[]>(`/api/costs/trend?days=${days}`),
   migrationCatalog: () => req<MigrationCatalog>('/api/migration/catalog'),
+  migrationPricingConfig: () => req<MigrationPricingConfig>('/api/migration/pricing/config'),
+  refreshMigrationPricing: () =>
+    req<MigrationPricingRefresh>('/api/migration/pricing/refresh', { method: 'POST', body: '{}' }),
   migrationEstimate: (body: MigrationRequest) =>
     req<MigrationEstimate>('/api/migration/estimate', { method: 'POST', body: JSON.stringify(body) }),
   migrationScenarios: () => req<MigrationScenario[]>('/api/migration/scenarios'),
@@ -429,6 +432,31 @@ export type MigrationCatalog = {
   notice: string
   providers: { id: string; name: string; categories: MigrationCategory[] }[]
   default_usage: Record<string, Record<string, number>>
+  pricing: {
+    mode: 'official' | 'official_preferred' | 'reference'
+    cache_hours: number
+    regions: Record<string, string>
+    official_mappings_configured: Record<string, boolean>
+    gcp_catalog_configured: boolean
+  }
+}
+
+export type MigrationPricingConfig = {
+  mode: 'official' | 'official_preferred' | 'reference'
+  cache_hours: number
+  regions: Record<string, string>
+  mappings: Record<string, unknown>
+  gcp_catalog_configured: boolean
+}
+
+export type MigrationPricingRefresh = {
+  kind: 'official'
+  fetched_at: string
+  expires_at: string
+  regions: Record<string, string>
+  cards: Record<string, unknown>
+  sources: { provider: string; region: string; sku: string; meter?: string; source_url: string }[]
+  errors: Record<string, string[]>
 }
 
 export type MigrationComponent = {
@@ -448,6 +476,8 @@ export type MigrationRequest = {
   usd_to_brl: number
   commitment_months: 0 | 12 | 36
   components?: MigrationComponent[]
+  pricing_mode?: 'official' | 'official_preferred' | 'reference'
+  refresh_prices?: boolean
 }
 
 export type MigrationServiceEstimate = {
@@ -472,7 +502,16 @@ export type MigrationEstimate = {
   id: string
   calculated_at: string
   catalog_version: string
-  catalog_kind: 'reference'
+  catalog_kind: 'official' | 'reference'
+  pricing: {
+    kind: 'official' | 'reference'
+    fallback: boolean
+    fetched_at?: string
+    expires_at?: string
+    regions?: Record<string, string>
+    sources?: { provider: string; region: string; sku: string; meter?: string; source_url: string }[]
+    official_error?: string
+  }
   scope: { type: string; value?: string | null }
   currency: 'BRL' | 'USD'
   usd_to_brl: number

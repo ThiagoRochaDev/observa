@@ -10,6 +10,7 @@ from app.application import (
     budget_service,
     governance_service,
     migration_service,
+    official_pricing_service,
     remediation_service,
     sync_service,
 )
@@ -184,10 +185,17 @@ class MigrationEstimateBody(BaseModel):
     usd_to_brl: float = Field(default=5.0, gt=0)
     commitment_months: int = 0
     components: list[MigrationComponentInput] = Field(default_factory=list)
+    pricing_mode: str | None = None
+    refresh_prices: bool = False
 
 
 class MigrationScenarioCreate(MigrationEstimateBody):
     name: str = Field(min_length=1, max_length=120)
+
+
+class MigrationPricingConfigUpdate(BaseModel):
+    regions: dict[str, str]
+    mappings: dict[str, Any]
 
 
 class LogEventInput(BaseModel):
@@ -474,6 +482,24 @@ def costs_trend(days: int = 30):
 @router.get("/migration/catalog")
 def migration_catalog():
     return migration_service.catalog()
+
+
+@router.get("/migration/pricing/config")
+def migration_pricing_config():
+    return official_pricing_service.get_config()
+
+
+@router.put("/migration/pricing/config", dependencies=[Depends(require_tenancy_admin)])
+def update_migration_pricing_config(body: MigrationPricingConfigUpdate):
+    return official_pricing_service.save_config(body.regions, body.mappings)
+
+
+@router.post("/migration/pricing/refresh", dependencies=[Depends(require_tenancy_operator)])
+def refresh_migration_pricing():
+    try:
+        return official_pricing_service.refresh()
+    except Exception as exc:
+        raise HTTPException(502, str(exc)[:1000]) from exc
 
 
 @router.post("/migration/estimate")

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
     auth_rate_limit_requests: int = 30
     max_request_body_bytes: int = 2_000_000
+    migration_pricing_mode: str = "official_preferred"
+    migration_pricing_cache_hours: int = 24
+    gcp_billing_catalog_api_key: str | None = None
     trust_proxy_headers: bool = False
     # Where to bounce the browser back to once the OIDC callback finishes —
     # the Next.js app (not the API itself). Override in prod (e.g. behind a
@@ -96,3 +99,5 @@ def validate_production_settings(settings: Settings) -> None:
         for origin in settings.cors_origins
     ):
         raise RuntimeError("Production CORS_ORIGINS must not use only localhost origins")
+    if settings.migration_pricing_mode != "official":
+        raise RuntimeError("Production MIGRATION_PRICING_MODE must be 'official'")

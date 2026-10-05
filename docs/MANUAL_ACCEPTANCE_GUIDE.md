@@ -804,6 +804,18 @@ Resultado esperado: resposta contém `catalog_version`, `components`, `compariso
 
 Resultado esperado: mensagens claras, nenhum cenário parcial e HTTP 400/403 conforme o caso.
 
+### OBS-MIG-007 — Catálogos oficiais e falha segura
+
+1. Configure uma tenancy com regiões e SKUs válidos em `/api/migration/pricing/config`.
+2. Defina `GCP_BILLING_CATALOG_API_KEY` pelo secret manager quando GCP for alvo.
+3. Clique em **Atualizar catálogos oficiais**.
+4. Marque **Exigir somente preços oficiais** e simule.
+5. Remova um SKU obrigatório e repita.
+
+Resultado esperado: o primeiro cálculo informa `catalog_kind=official`, região, SKU, meter,
+vigência e URL oficial; o segundo falha claramente e não reutiliza referência. Em `production`,
+qualquer tentativa de selecionar fallback é recusada.
+
 Guia funcional e contratos: `docs/MULTICLOUD_MIGRATION.md`.
 
 ## 28. Vídeo completo

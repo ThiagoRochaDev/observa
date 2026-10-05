@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.core import db
+from app.core.config import get_settings
+from app.application import official_pricing_service
 
 CATALOG_VERSION = "observa-reference-2026.10-v1"
 SUPPORTED_PROVIDERS = ("aws", "gcp", "azure")
@@ -93,6 +95,7 @@ RESOURCE_ALIASES = {
 
 
 def catalog() -> dict[str, Any]:
+    pricing_config = official_pricing_service.get_config()
     return {
         "version": CATALOG_VERSION,
         "currency": "USD",
@@ -116,6 +119,15 @@ def catalog() -> dict[str, Any]:
             for provider in SUPPORTED_PROVIDERS
         ],
         "default_usage": DEFAULT_USAGE,
+        "pricing": {
+            "mode": pricing_config["mode"],
+            "cache_hours": pricing_config["cache_hours"],
+            "regions": pricing_config["regions"],
+            "official_mappings_configured": {
+                provider: bool(pricing_config["mappings"].get(provider)) for provider in SUPPORTED_PROVIDERS
+            },
+            "gcp_catalog_configured": pricing_config["gcp_catalog_configured"],
+        },
     }
 
 
@@ -278,13 +290,19 @@ def _discount(commitment_months: int) -> float:
     return 1.0
 
 
-def _provider_estimate(provider: str, components: list[dict[str, Any]], commitment_months: int) -> dict[str, Any]:
-    discount = _discount(commitment_months)
+def _provider_estimate(
+    provider: str,
+    components: list[dict[str, Any]],
+    commitment_months: int,
+    rate_cards: dict[str, dict[str, dict[str, Any]]],
+    apply_reference_discount: bool,
+) -> dict[str, Any]:
+    discount = _discount(commitment_months) if apply_reference_discount else 1.0
     services = []
     total_usd = 0.0
     for component in components:
         category = component["category"]
-        card = RATE_CARDS[provider][category]
+        card = rate_cards[provider][category]
         units = _units(category, component["usage"])
         lines = []
         subtotal = 0.0
@@ -347,9 +365,59 @@ def estimate(payload: dict[str, Any]) -> dict[str, Any]:
     if usd_to_brl <= 0:
         raise ValueError("USD to BRL exchange rate must be positive")
 
+    pricing_mode = str(payload.get("pricing_mode") or get_settings().migration_pricing_mode)
+    if pricing_mode not in {"official", "official_preferred", "reference"}:
+        raise ValueError("Pricing mode must be official, official_preferred or reference")
+    if get_settings().environment.lower() == "production" and pricing_mode != "official":
+        raise ValueError("Production estimates require official pricing")
+    rate_cards = RATE_CARDS
+    pricing_metadata: dict[str, Any] = {
+        "kind": "reference",
+        "catalog_version": CATALOG_VERSION,
+        "fallback": False,
+    }
+    official_error = None
+    if pricing_mode in {"official", "official_preferred"}:
+        try:
+            official = official_pricing_service.get_rates(
+                targets, refresh_prices=bool(payload.get("refresh_prices"))
+            )
+            required_categories = {component["category"] for component in components}
+            incomplete = {
+                provider: sorted(required_categories - set((official["cards"].get(provider) or {}).keys()))
+                for provider in targets
+            }
+            incomplete = {provider: rows for provider, rows in incomplete.items() if rows}
+            if incomplete:
+                raise official_pricing_service.PricingUnavailable(
+                    "Official SKU mappings do not cover: "
+                    + "; ".join(f"{provider}={','.join(rows)}" for provider, rows in incomplete.items())
+                )
+            rate_cards = official["cards"]
+            pricing_metadata = {
+                "kind": "official",
+                "fetched_at": official["fetched_at"],
+                "expires_at": official["expires_at"],
+                "regions": official["regions"],
+                "sources": official["sources"],
+                "fallback": False,
+            }
+        except official_pricing_service.PricingUnavailable as exc:
+            official_error = str(exc)
+            if pricing_mode == "official":
+                raise ValueError(official_error) from exc
+            pricing_metadata["fallback"] = True
+            pricing_metadata["official_error"] = official_error
+
     comparisons = []
     for provider in targets:
-        comparison = _provider_estimate(provider, components, commitment_months)
+        comparison = _provider_estimate(
+            provider,
+            components,
+            commitment_months,
+            rate_cards,
+            pricing_metadata["kind"] == "reference",
+        )
         comparison["monthly_cost"] = round(
             comparison["monthly_usd"] * (usd_to_brl if output_currency == "BRL" else 1), 2
         )
@@ -379,18 +447,22 @@ def estimate(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     warnings = sorted({warning for component in components for warning in component["warnings"]})
-    warnings.extend(
-        [
-            "Catálogo de referência: não inclui impostos, suporte, descontos privados, free tier nem preços spot.",
-            "Valide região, arquitetura, tráfego, alta disponibilidade e preços oficiais antes de aprovar a migração.",
-        ]
-    )
+    if pricing_metadata["kind"] == "reference":
+        warnings.append("Catálogo de referência: não inclui impostos, suporte, descontos privados, free tier nem preços spot.")
+        if official_error:
+            warnings.append(f"Preço oficial indisponível; fallback de desenvolvimento: {official_error}")
+    elif commitment_months:
+        warnings.append(
+            "Compromisso não recebeu desconto presumido: configure SKUs oficiais de reserva/savings plan para refletir o contrato."
+        )
+    warnings.append("Valide arquitetura, tráfego, alta disponibilidade e contrato privado antes de aprovar a migração.")
     confidence = round(sum(component["confidence"] for component in components) / len(components), 2)
     return {
         "id": f"estimate_{uuid.uuid4().hex[:16]}",
         "calculated_at": datetime.now(timezone.utc).isoformat(),
         "catalog_version": CATALOG_VERSION,
-        "catalog_kind": "reference",
+        "catalog_kind": pricing_metadata["kind"],
+        "pricing": pricing_metadata,
         "scope": {"type": scope_type, "value": scope_value},
         "currency": output_currency,
         "usd_to_brl": usd_to_brl,

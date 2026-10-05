@@ -144,7 +144,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--architecture", help="JSON file containing a component list for custom scope"
     )
     migration_estimate.add_argument("--save", metavar="NAME", help="Save the scenario in this tenancy")
+    migration_estimate.add_argument("--official", action="store_true", help="Fail unless every rate comes from an official provider catalog")
+    migration_estimate.add_argument("--refresh-prices", action="store_true", help="Refresh official catalogs before estimating")
     migration_sub.add_parser("scenarios")
+    migration_sub.add_parser("refresh-prices")
     migration_delete = migration_sub.add_parser("delete")
     migration_delete.add_argument("scenario_id")
 
@@ -296,12 +299,16 @@ def dispatch(client: Client, args: argparse.Namespace) -> Any:
             "usd_to_brl": args.usd_to_brl,
             "commitment_months": args.commitment,
             "components": components,
+            "pricing_mode": "official" if args.official else "official_preferred",
+            "refresh_prices": args.refresh_prices,
         }
         if args.save:
             return client.request("POST", "/api/migration/scenarios", {"name": args.save, **payload})
         return client.request("POST", "/api/migration/estimate", payload)
     if args.command == "migration" and args.operation == "scenarios":
         return client.request("GET", "/api/migration/scenarios")
+    if args.command == "migration" and args.operation == "refresh-prices":
+        return client.request("POST", "/api/migration/pricing/refresh", {})
     if args.command == "migration" and args.operation == "delete":
         return client.request("DELETE", f"/api/migration/scenarios/{args.scenario_id}")
     if args.command == "remediations" and args.operation == "list":

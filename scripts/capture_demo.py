@@ -148,13 +148,15 @@ def main() -> None:
             capture_page(page, filename, path)
 
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
-        search = page.get_by_placeholder("Qual serviço você deseja acessar?")
-        search.fill("conexões")
+        page.locator("input[type='search']").wait_for()
+        search = page.locator("input[type='search']").first
+        search.fill("conexoes")
         page.wait_for_timeout(500)
         page.screenshot(path=FRAMES / "015-global-search.png")
 
         page.goto(f"{BASE_URL}/connections", wait_until="domcontentloaded")
-        page.get_by_placeholder("Buscar conectores…").fill("GitHub")
+        page.locator("input[placeholder^='Buscar conectores']").wait_for()
+        page.locator("input[placeholder^='Buscar conectores']").fill("GitHub")
         page.wait_for_timeout(500)
         page.get_by_text("GitHub", exact=True).first.click()
         page.wait_for_timeout(500)

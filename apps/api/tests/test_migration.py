@@ -113,3 +113,81 @@ def test_saved_migration_scenarios_are_isolated_by_tenancy(client):
 
     client.headers.pop("X-Observa-Company-ID", None)
     client.headers.pop("X-Observa-Tenancy-ID", None)
+
+
+def test_official_mode_fails_closed_without_sku_mappings(client):
+    response = client.post(
+        "/api/migration/estimate",
+        json={**custom_payload(), "target_providers": ["azure"], "pricing_mode": "official"},
+    )
+    assert response.status_code == 400
+    assert "Official pricing unavailable" in response.json()["detail"]
+
+
+def test_official_catalog_rates_are_used_and_traced(client, monkeypatch):
+    from app.application import official_pricing_service
+
+    mappings = {
+        "azure": {
+            "load_balancer": {
+                "service": "Azure Load Balancer",
+                "sku": "official-standard",
+                "metrics": {"lb_hour": {"meterId": "meter-live"}},
+            }
+        }
+    }
+    saved = client.put(
+        "/api/migration/pricing/config",
+        json={
+            "regions": {"aws": "sa-east-1", "gcp": "southamerica-east1", "azure": "brazilsouth"},
+            "mappings": mappings,
+        },
+    )
+    assert saved.status_code == 200
+
+    monkeypatch.setitem(
+        official_pricing_service.FETCHERS,
+        "azure",
+        lambda mapping, region: (
+            0.031,
+            {
+                "provider": "azure",
+                "region": region,
+                "sku": "DZH-test/001",
+                "meter": "Standard LB Hour",
+                "unit": "1 Hour",
+                "effective_at": "2026-10-01T00:00:00Z",
+                "source_url": "https://prices.azure.com/api/retail/prices",
+            },
+        ),
+    )
+    response = client.post(
+        "/api/migration/estimate",
+        json={
+            "scope_type": "custom",
+            "target_providers": ["azure"],
+            "pricing_mode": "official",
+            "refresh_prices": True,
+            "currency": "USD",
+            "commitment_months": 12,
+            "components": [
+                {"name": "Public LB", "category": "load_balancer", "usage": {"hours": 100}}
+            ],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["catalog_kind"] == "official"
+    assert body["pricing"]["fallback"] is False
+    assert body["pricing"]["sources"][0]["sku"] == "DZH-test/001"
+    assert body["comparisons"][0]["monthly_cost"] == 3.1
+    assert body["comparisons"][0]["services"][0]["commitment_discount_pct"] == 0
+    assert any("desconto presumido" in warning for warning in body["warnings"])
+
+    client.put(
+        "/api/migration/pricing/config",
+        json={
+            "regions": {"aws": "sa-east-1", "gcp": "southamerica-east1", "azure": "brazilsouth"},
+            "mappings": {},
+        },
+    )

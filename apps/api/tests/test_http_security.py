@@ -69,5 +69,19 @@ def test_production_accepts_strong_external_secrets():
         observa_secrets_key="9fkP6D-M4A3kE-T2I-kHuG6zB7G3RsCM9v8Oya7DjbM=",
         observa_session_secret="b" * 32,
         cors_origins=[],
+        migration_pricing_mode="official",
     )
     validate_production_settings(settings)
+
+
+def test_production_rejects_reference_migration_prices():
+    settings = Settings(
+        environment="production",
+        observa_api_key="a" * 32,
+        observa_secrets_key="9fkP6D-M4A3kE-T2I-kHuG6zB7G3RsCM9v8Oya7DjbM=",
+        observa_session_secret="b" * 32,
+        cors_origins=[],
+        migration_pricing_mode="official_preferred",
+    )
+    with pytest.raises(RuntimeError, match="MIGRATION_PRICING_MODE"):
+        validate_production_settings(settings)

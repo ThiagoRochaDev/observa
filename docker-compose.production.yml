@@ -10,6 +10,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-[]}
       RATE_LIMIT_ENABLED: "true"
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      MIGRATION_PRICING_MODE: official
+      MIGRATION_PRICING_CACHE_HOURS: ${MIGRATION_PRICING_CACHE_HOURS:-24}
+      GCP_BILLING_CATALOG_API_KEY: ${GCP_BILLING_CATALOG_API_KEY:-}
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]

@@ -14,9 +14,18 @@ inteira ou uma arquitetura informada manualmente.
 - Salvar cenários dentro da tenancy ativa, sem compartilhar dados com outra empresa ou tenancy.
 - Nunca executar uma migração ou alterar infraestrutura a partir do simulador.
 
-O catálogo embutido `observa-reference-2026.10-v1` é deliberadamente identificado como
-**referência**. Ele não substitui Pricing Calculator, catálogo oficial, contrato privado, impostos,
-free tier, suporte, spot/preemptible, região, alta disponibilidade ou custo operacional da migração.
+Em produção, `MIGRATION_PRICING_MODE=official` torna obrigatório consultar e rastrear os catálogos
+oficiais. O cálculo falha se algum provider, categoria ou métrica não possuir SKU mapeado; nunca há
+fallback silencioso. Em desenvolvimento, `official_preferred` tenta o catálogo oficial e identifica
+visivelmente qualquer fallback para o catálogo de referência.
+
+As fontes suportadas são AWS Price List Bulk API, Google Cloud Billing Catalog API e Azure Retail
+Prices API. Cada resultado oficial grava região, SKU/meter, unidade, vigência, URL da fonte,
+`fetched_at` e `expires_at`. O cache padrão é de 24 horas e pode ser renovado manualmente.
+
+- AWS: https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/using-the-aws-price-list-bulk-api.html
+- GCP: https://cloud.google.com/billing/v1/how-tos/catalog-api
+- Azure: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
 
 ## Escopos
 
@@ -39,6 +48,8 @@ o Observa aplica defaults editáveis e reduz a confiança do resultado. O aviso 
 5. Clique em **Comparar custos**.
 6. Expanda cada serviço para conferir SKU, unidades, preço unitário e fórmula.
 7. Informe um nome e clique em **Salvar cenário** para manter a análise na tenancy atual.
+8. Marque **Exigir somente preços oficiais** para impedir fallback e use **Atualizar catálogos
+   oficiais** para renovar o cache.
 
 Exemplo de arquitetura LB + Cloud Run equivalente + bucket:
 
@@ -86,6 +97,9 @@ python -m observa_cli.main migration delete <SCENARIO_ID>
 | Método | Endpoint | Uso |
 |---|---|---|
 | `GET` | `/api/migration/catalog` | Catálogo, categorias, rates e defaults |
+| `GET` | `/api/migration/pricing/config` | Regiões e status dos mapeamentos oficiais |
+| `PUT` | `/api/migration/pricing/config` | Salva regiões e mapeamentos SKU; exige admin |
+| `POST` | `/api/migration/pricing/refresh` | Atualiza preços e metadados oficiais |
 | `POST` | `/api/migration/estimate` | Simulação sem persistência |
 | `GET` | `/api/migration/scenarios` | Cenários da tenancy atual |
 | `POST` | `/api/migration/scenarios` | Simula e salva; exige operator |
@@ -94,9 +108,67 @@ python -m observa_cli.main migration delete <SCENARIO_ID>
 Todas as rotas exigem API key e contexto de company/tenancy. O banco de cada tenancy é separado
 fisicamente pela camada de persistência do Observa.
 
-## Evolução para preços oficiais
+## Configuração oficial de produção
 
-O contrato de cálculo já separa catálogo, consumo normalizado e resultado. Adapters futuros podem
-importar AWS Price List, Google Cloud Billing Catalog, Azure Retail Prices e tabelas privadas do
-cliente sem mudar os escopos ou a interface. A versão do catálogo usada fica gravada no cenário
-para garantir auditabilidade e permitir recálculo posterior.
+Defina no runtime:
+
+```dotenv
+ENVIRONMENT=production
+MIGRATION_PRICING_MODE=official
+MIGRATION_PRICING_CACHE_HOURS=24
+GCP_BILLING_CATALOG_API_KEY=<secret-manager>
+```
+
+Configure os SKUs exatos por tenancy com `PUT /api/migration/pricing/config`. O mapeamento associa
+cada métrica normalizada a um identificador oficial. AWS requer `service_code`, `sku` e `unit`; GCP
+requer `service_id` e `sku_id`; Azure aceita `meterId`, `skuId` ou a combinação exata de campos da
+Retail Prices API. `multiplier` converte a unidade oficial para a unidade normalizada quando preciso.
+
+```json
+{
+  "regions": {"aws":"sa-east-1","gcp":"southamerica-east1","azure":"brazilsouth"},
+  "mappings": {
+    "azure": {
+      "load_balancer": {
+        "service": "Azure Load Balancer",
+        "sku": "Standard",
+        "metrics": {
+          "lb_hour": {"meterId":"<METER_ID_OFICIAL>","multiplier":1}
+        }
+      }
+    },
+    "gcp": {
+      "serverless_container": {
+        "service": "Cloud Run",
+        "sku": "regional",
+        "metrics": {
+          "vcpu_hour": {"service_id":"<SERVICE_ID>","sku_id":"<SKU_ID>"}
+        }
+      }
+    },
+    "aws": {
+      "compute": {
+        "service": "Amazon EC2",
+        "sku": "m6i.large",
+        "metrics": {
+          "instance_hour": {"service_code":"AmazonEC2","sku":"<SKU>","unit":"Hrs"}
+        }
+      }
+    }
+  }
+}
+```
+
+Os IDs devem ser obtidos do catálogo da conta/região alvo e revisados quando a arquitetura mudar.
+Descontos privados não aparecem nos catálogos públicos; para eles, importe uma tabela contratual
+aprovada como evolução do adapter, mantendo a mesma trilha de origem e vigência.
+
+O modo oficial não aplica percentuais presumidos de compromisso. Nesta versão, selecionar 12 ou
+36 meses preserva o preço do SKU mapeado e exibe um aviso. Para comparar reservas/savings plans,
+cadastre cenários separados com os SKUs oficiais do termo correspondente.
+
+## Evolução para preços contratuais
+
+Os catálogos públicos oficiais já são suportados. O próximo nível é integrar AWS Private Pricing,
+Google Cloud Pricing API vinculada à billing account e exports Azure com preços negociados. Essas
+fontes devem sobrescrever somente SKUs correspondentes e manter origem, vigência e auditoria.
